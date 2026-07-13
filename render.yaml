@@ -2,16 +2,20 @@ services:
   - type: web
     name: ecotracker-api
     runtime: node
+    plan: free
+    region: oregon
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: ecotracker-db
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_EMAIL
@@ -28,3 +32,11 @@ services:
         sync: false
       - key: REGISTRY_CONTRACT_ADDRESS
         sync: false
+
+databases:
+  - name: ecotracker-db
+    plan: free
+    region: oregon
+    databaseName: ecotracker
+    user: ecotracker
+    ipAllowList: []
