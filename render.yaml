@@ -24,14 +24,6 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-      - key: PINATA_JWT
-        sync: false
-      - key: POLYGON_RPC_URL
-        sync: false
-      - key: BLOCKCHAIN_PRIVATE_KEY
-        sync: false
-      - key: REGISTRY_CONTRACT_ADDRESS
-        sync: false
 
 databases:
   - name: ecotracker-db
