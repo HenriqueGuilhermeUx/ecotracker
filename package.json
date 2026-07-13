@@ -1,0 +1,11 @@
+{
+  "name": "ecotracker",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "dev:api": "npm run dev --workspace backend",
+    "dev:web": "npm run dev --workspace frontend"
+  }
+}

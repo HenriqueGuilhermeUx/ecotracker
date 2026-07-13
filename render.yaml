@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: ecotracker-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: PINATA_JWT
+        sync: false
+      - key: POLYGON_RPC_URL
+        sync: false
+      - key: BLOCKCHAIN_PRIVATE_KEY
+        sync: false
+      - key: REGISTRY_CONTRACT_ADDRESS
+        sync: false
