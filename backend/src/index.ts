@@ -18,6 +18,12 @@ app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : true }));
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/", (_req, res) => res.json({
+  status: "ok",
+  service: "ecotracker-api",
+  message: "EcoTracker API online",
+  health: "/api/health",
+}));
 app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "ecotracker-api" }));
 
 app.post("/api/auth/login", (req, res) => {
