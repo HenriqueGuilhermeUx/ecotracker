@@ -6,7 +6,9 @@ const abi = [
 ];
 
 function getContract(): ethers.Contract | null {
-  const rpc = process.env.POLYGON_RPC_URL;
+  // BASE_RPC_URL is the production target. POLYGON_RPC_URL remains as a temporary
+  // compatibility fallback for environments created before the Base migration.
+  const rpc = process.env.BASE_RPC_URL || process.env.POLYGON_RPC_URL;
   const key = process.env.BLOCKCHAIN_PRIVATE_KEY;
   const address = process.env.REGISTRY_CONTRACT_ADDRESS;
   if (!rpc || !key || !address) return null;
@@ -29,9 +31,9 @@ export async function registerAssetOnChain(input: {
   if (!contract) return null;
   const assetKey = makeAssetKey(input.registry, input.registryId);
   const documentHash = `0x${input.documentSha256}`;
-  const tx = await contract.registerAsset(assetKey, documentHash, input.registryId, input.totalKg);
-  const receipt = await tx.wait();
-  return receipt?.hash ?? tx.hash;
+  const transaction = await contract.registerAsset(assetKey, documentHash, input.registryId, input.totalKg);
+  const receipt = await transaction.wait();
+  return receipt?.hash ?? transaction.hash;
 }
 
 export async function registerBatchOnChain(input: {
@@ -43,7 +45,7 @@ export async function registerBatchOnChain(input: {
   const contract = getContract();
   if (!contract) return null;
   const assetKey = makeAssetKey(input.registry, input.registryId);
-  const tx = await contract.registerBatch(assetKey, input.batchId, input.tokenAmount);
-  const receipt = await tx.wait();
-  return receipt?.hash ?? tx.hash;
+  const transaction = await contract.registerBatch(assetKey, input.batchId, input.tokenAmount);
+  const receipt = await transaction.wait();
+  return receipt?.hash ?? transaction.hash;
 }
