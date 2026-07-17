@@ -4,31 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#06100c" />
-    <meta name="ecotracker-build" content="github-netlify-2026-07-17" />
+    <meta name="ecotracker-build" content="github-netlify-market-fix-v3" />
     <meta
       name="description"
       content="EcoTracker — Carbon Tokenization Protocol. Tokens ECOT com lastro auditável, documentos em IPFS e registro na blockchain Base."
     />
     <title>EcoTracker — Carbon Tokenization Protocol</title>
-    <script>
-      // Remove qualquer service worker/cache deixado pela hospedagem anterior.
-      // A limpeza é executada no domínio atual antes de iniciar o aplicativo.
-      (() => {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.getRegistrations()
-            .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-            .catch(() => undefined);
-        }
-        if ("caches" in window) {
-          caches.keys()
-            .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
-            .catch(() => undefined);
-        }
-      })();
-    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main style="min-height:100vh;display:grid;place-items:center;background:#06100c;color:#edf8f1;font-family:sans-serif">
+        <div style="text-align:center">
+          <strong style="display:block;color:#69ff9a;letter-spacing:.12em">ECOTRACKER</strong>
+          <span style="display:block;margin-top:10px;color:#91a99d">Iniciando catálogo ambiental...</span>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
