@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --import ./dist/market-hook.js dist/index.js",
     "check": "tsc --noEmit"
   },
   "dependencies": {
