@@ -4,11 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#06100c" />
+    <meta name="ecotracker-build" content="github-netlify-2026-07-17" />
     <meta
       name="description"
       content="EcoTracker — Carbon Tokenization Protocol. Tokens ECOT com lastro auditável, documentos em IPFS e registro na blockchain Base."
     />
     <title>EcoTracker — Carbon Tokenization Protocol</title>
+    <script>
+      // Remove qualquer service worker/cache deixado pela hospedagem anterior.
+      // A limpeza é executada no domínio atual antes de iniciar o aplicativo.
+      (() => {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations()
+            .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+            .catch(() => undefined);
+        }
+        if ("caches" in window) {
+          caches.keys()
+            .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+            .catch(() => undefined);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
