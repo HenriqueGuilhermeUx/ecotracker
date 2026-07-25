@@ -17,7 +17,9 @@ if (!proto.__marketInstalled) {
     // As rotas de comércio vêm primeiro para enriquecer o acompanhamento público.
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
-    void Promise.all([initMarketDb(), initCommerceDb()])
+    // quote_requests nasce em initMarketDb e só depois recebe as colunas comerciais.
+    void initMarketDb()
+      .then(() => initCommerceDb())
       .then(() => {
         startCommerceWorker();
         return original.apply(this, args);
