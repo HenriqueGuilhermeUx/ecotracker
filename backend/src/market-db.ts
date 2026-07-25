@@ -1,5 +1,27 @@
 import { pool } from "./db.js";
 
+const MARKET_SEED_SQL = `
+  INSERT INTO monitored_assets
+    (registry,project_name,source_reference,source_url,asset_type,quality_tier,description,pricing_mode,availability_status,source_status,min_order_kg,active)
+  VALUES
+    ('Regen Network','Eco-créditos do Regen Marketplace','regen-marketplace','https://app.regen.network/','carbon','screening','Ordens públicas on-chain. Volume, moedas e referências de preço são monitorados; a execução é confirmada antes da cobrança.','quote','monitoring','connected',100,TRUE),
+    ('Open Forest Protocol','Projetos de reflorestamento OFP','ofp-projects','https://www.openforestprotocol.org/','carbon-removal','premium','Projetos florestais com monitoramento digital. O EcoTracker solicita lote, preço e prazo diretamente ao canal de originação.','quote','monitoring','manual',1000,TRUE),
+    ('Coorest Carbon Standard','Créditos de remoção Coorest','coorest-removals','https://coorest.eu/','carbon-removal','premium','Ativos de remoção monitorados digitalmente. A fonte, o lote e as condições comerciais são validados antes da proposta.','quote','monitoring','manual',100,TRUE)
+  ON CONFLICT (registry,source_reference) DO UPDATE SET
+    project_name=EXCLUDED.project_name,
+    source_url=EXCLUDED.source_url,
+    asset_type=EXCLUDED.asset_type,
+    quality_tier=EXCLUDED.quality_tier,
+    description=EXCLUDED.description,
+    min_order_kg=EXCLUDED.min_order_kg,
+    active=TRUE,
+    updated_at=NOW();
+`;
+
+export async function ensureMarketSeedAssets(): Promise<void> {
+  await pool.query(MARKET_SEED_SQL);
+}
+
 export async function initMarketDb(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS monitored_assets (
@@ -59,23 +81,7 @@ export async function initMarketDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS monitored_assets_active_idx ON monitored_assets(active, updated_at DESC);
   `);
 
-  await pool.query(`
-    INSERT INTO monitored_assets
-      (registry,project_name,source_reference,source_url,asset_type,quality_tier,description,pricing_mode,availability_status,source_status,min_order_kg,active)
-    VALUES
-      ('Regen Network','Eco-créditos do Regen Marketplace','regen-marketplace','https://app.regen.network/','carbon','screening','Ordens públicas on-chain. Volume, moedas e referências de preço são monitorados; a execução é confirmada antes da cobrança.','quote','monitoring','connected',100,TRUE),
-      ('Open Forest Protocol','Projetos de reflorestamento OFP','ofp-projects','https://www.openforestprotocol.org/','carbon-removal','premium','Projetos florestais com monitoramento digital. O EcoTracker solicita lote, preço e prazo diretamente ao canal de originação.','quote','monitoring','manual',1000,TRUE),
-      ('Coorest Carbon Standard','Créditos de remoção Coorest','coorest-removals','https://coorest.eu/','carbon-removal','premium','Ativos de remoção monitorados digitalmente. A fonte, o lote e as condições comerciais são validados antes da proposta.','quote','monitoring','manual',100,TRUE)
-    ON CONFLICT (registry,source_reference) DO UPDATE SET
-      project_name=EXCLUDED.project_name,
-      source_url=EXCLUDED.source_url,
-      asset_type=EXCLUDED.asset_type,
-      quality_tier=EXCLUDED.quality_tier,
-      description=EXCLUDED.description,
-      min_order_kg=EXCLUDED.min_order_kg,
-      active=TRUE,
-      updated_at=NOW();
-  `);
+  await ensureMarketSeedAssets();
 }
 
 export const assetProjection = `a.*,
