@@ -1,9 +1,10 @@
-import type { Application, NextFunction, Request, Response } from "express";
+import type { Application, Request, Response } from "express";
 import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { pool } from "./db.js";
 import { assetProjection } from "./market-db.js";
 import { refreshIfStale, refreshMarketData } from "./market-refresh.js";
+import { calculateAutomaticPricing } from "./commerce-service.js";
 
 const statuses = ["requested", "reviewing", "quoted", "awaiting_payment", "sourcing", "retired", "delivered", "cancelled"] as const;
 
@@ -44,13 +45,6 @@ const values = (data: AssetInput) => [
 const fail = (res: Response, error: unknown) =>
   res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
 
-const calc = (asset: Record<string, unknown>, kg: number) => {
-  if (asset.source_price_usd_ton == null) return { price: null, total: null };
-  const ton = Number(asset.source_price_usd_ton) * Number(asset.fx_brl_usd) *
-    (1 + Number(asset.service_margin_pct) / 100) + Number(asset.fixed_fee_brl);
-  return { price: ton / 1000, total: ton * kg / 1000 };
-};
-
 async function listPublicAssets() {
   const { rows } = await pool.query(
     `SELECT ${assetProjection} FROM monitored_assets a
@@ -64,10 +58,9 @@ export function registerMarketRoutes(app: Application) {
   app.get("/api/market/assets", async (_req: Request, res: Response) => {
     try {
       await refreshIfStale();
+      res.setHeader("Cache-Control", "no-store");
       res.json(await listPublicAssets());
-    } catch (error) {
-      fail(res, error);
-    }
+    } catch (error) { fail(res, error); }
   });
 
   app.get("/api/market/refresh", async (_req: Request, res: Response) => {
@@ -75,9 +68,7 @@ export function registerMarketRoutes(app: Application) {
       await refreshIfStale(60 * 1000);
       res.setHeader("Cache-Control", "no-store");
       res.json(await listPublicAssets());
-    } catch (error) {
-      fail(res, error);
-    }
+    } catch (error) { fail(res, error); }
   });
 
   app.post("/api/market/quotes", async (req: Request, res: Response) => {
@@ -104,30 +95,42 @@ export function registerMarketRoutes(app: Application) {
       const asset = assetResult.rows[0];
       if (!asset) return res.status(404).json({ error: "Ativo monitorado não encontrado" });
       if (parsed.data.requestedKg < Number(asset.min_order_kg)) {
-        return res.status(400).json({ error: `Pedido mínimo: ${asset.min_order_kg} kg` });
+        return res.status(400).json({ error: `Pedido mínimo: ${asset.min_order_kg} ECOT` });
       }
 
-      const estimate = calc(asset, parsed.data.requestedKg);
+      const pricing = calculateAutomaticPricing(asset, parsed.data.requestedKg);
+      const taxPct = Number(process.env.ECOT_TAX_RESERVE_PCT || 0);
+      const taxReserve = pricing.finalTotalBrl == null ? 0 : Number((pricing.finalTotalBrl * Math.max(0, taxPct) / 100).toFixed(2));
+      const netProfit = pricing.grossProfitBrl == null ? null : Number((pricing.grossProfitBrl - taxReserve).toFixed(2));
+      const initialStatus = pricing.automatic ? "quoted" : "requested";
+
       const { rows } = await pool.query(
         `INSERT INTO quote_requests
-          (asset_id,buyer_name,buyer_email,buyer_phone,company_name,tax_id,requested_kg,delivery_mode,wallet_address,purpose,indicative_price_per_kg,indicative_total)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         RETURNING public_code,status,requested_kg,indicative_price_per_kg,indicative_total,created_at`,
+          (asset_id,buyer_name,buyer_email,buyer_phone,company_name,tax_id,requested_kg,delivery_mode,wallet_address,purpose,
+           indicative_price_per_kg,indicative_total,source_cost_brl,final_total,gross_revenue_brl,gross_profit_brl,
+           tax_reserve_brl,net_profit_brl,status,quote_expires_at,pricing_snapshot,source_order_id,source_batch_denom)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22)
+         RETURNING public_code,status,requested_kg,indicative_price_per_kg,indicative_total,final_total,quote_expires_at,created_at`,
         [parsed.data.assetId, parsed.data.buyerName, parsed.data.buyerEmail, parsed.data.buyerPhone || null,
           parsed.data.companyName || null, parsed.data.taxId || null, parsed.data.requestedKg,
           parsed.data.deliveryMode, parsed.data.walletAddress || null, parsed.data.purpose,
-          estimate.price, estimate.total],
+          pricing.finalTotalBrl == null ? null : pricing.finalTotalBrl / parsed.data.requestedKg,
+          pricing.finalTotalBrl, pricing.sourceCostBrl, pricing.finalTotalBrl, pricing.grossProfitBrl,
+          taxReserve, netProfit, initialStatus, pricing.quoteExpiresAt, JSON.stringify(pricing.snapshot),
+          (asset.monitor_details || {}).sellOrderId || null, (asset.monitor_details || {}).batchDenom || null],
       );
       res.status(201).json({
         ...rows[0],
+        checkoutReady: pricing.automatic,
         asset: { id: asset.id, registry: asset.registry, projectName: asset.project_name },
-        message: "Solicitação registrada. Preço e disponibilidade serão confirmados antes de qualquer cobrança.",
+        message: pricing.automatic
+          ? "Cotação executável gerada. Você já pode escolher Pix ou cartão."
+          : "Solicitação registrada. Preço e disponibilidade serão confirmados antes de qualquer cobrança.",
       });
-    } catch (error) {
-      fail(res, error);
-    }
+    } catch (error) { fail(res, error); }
   });
 
+  // A versão enriquecida desta rota é registrada primeiro pelo módulo de comércio.
   app.get("/api/market/quotes/:publicCode", async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
@@ -137,9 +140,7 @@ export function registerMarketRoutes(app: Application) {
       );
       if (!rows[0]) return res.status(404).json({ error: "Cotação não encontrada" });
       res.json(rows[0]);
-    } catch (error) {
-      fail(res, error);
-    }
+    } catch (error) { fail(res, error); }
   });
 
   app.get("/api/admin/market/assets", requireAdmin, async (_req: Request, res: Response) => {
