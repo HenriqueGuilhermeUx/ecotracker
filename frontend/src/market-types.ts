@@ -11,6 +11,14 @@ export type MonitorDetails = {
   maxSourceUsdTon?: number;
   websiteStatus?: number;
   error?: string;
+  sellOrderId?: string;
+  batchDenom?: string;
+  askDenom?: string;
+  askAmount?: string;
+  displayDenom?: string;
+  disableAutoRetire?: boolean;
+  autoRetireAvailable?: boolean;
+  expiration?: string | null;
 };
 
 export type Asset = {
@@ -50,17 +58,73 @@ export type Quote = {
   buyer_email: string;
   buyer_phone?: string;
   company_name?: string;
+  tax_id?: string;
   requested_kg: number;
   delivery_mode: string;
   wallet_address?: string;
   purpose: string;
   indicative_total?: string | null;
   final_total?: string | null;
+  source_cost_brl?: string | null;
+  payment_fee_brl?: string | null;
+  tax_reserve_brl?: string | null;
+  gross_revenue_brl?: string | null;
+  gross_profit_brl?: string | null;
+  net_profit_brl?: string | null;
   status: string;
   quote_expires_at?: string | null;
+  payment_provider?: string | null;
+  payment_method?: string | null;
+  payment_status?: string;
+  payment_url?: string | null;
+  pix_br_code?: string | null;
+  pix_qr_code_url?: string | null;
+  paid_at?: string | null;
+  sourcing_status?: string;
+  sourcing_reference?: string | null;
+  sourcing_tx_hash?: string | null;
+  retirement_status?: string;
+  retirement_reference?: string | null;
+  retirement_tx_hash?: string | null;
+  retired_at?: string | null;
+  delivery_status?: string;
+  delivery_reference?: string | null;
+  delivery_tx_hash?: string | null;
+  delivered_at?: string | null;
+  receipt_status?: string;
+  receipt_public_code?: string | null;
+  nfse_status?: string;
+  nfse_url?: string | null;
+  allocation_public_code?: string | null;
   admin_notes?: string | null;
   registry: string;
   project_name: string;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type CommerceDashboard = {
+  quotes: number;
+  paid_orders: number;
+  paid_revenue_brl: string;
+  source_cost_brl: string;
+  payment_fees_brl: string;
+  tax_reserve_brl: string;
+  estimated_net_profit_brl: string;
+  delivered_ecot: string;
+  jobs: Array<{ status: string; total: number }>;
+  providers: Record<string, boolean>;
+};
+
+export type AutomationJob = {
+  id: number;
+  public_code: string;
+  quote_code: string;
+  job_type: string;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  last_error?: string | null;
   created_at: string;
 };
 
