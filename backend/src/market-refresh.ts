@@ -11,12 +11,19 @@ type RegenRefresh = {
   askDenoms: string[];
 } | null;
 
+type ChannelRefresh = { source: string; reachable: boolean; status: number | null };
+
 type MarketRefreshResult = {
   cached?: boolean;
   fx: number | null;
   regen: RegenRefresh;
-  channels: Array<{ source: string; reachable: boolean; status: number | null }>;
+  channels: ChannelRefresh[];
   refreshedAt: string;
+};
+
+type AllowedDenomsResponse = {
+  allowed_denoms?: Array<Record<string, unknown>>;
+  allowedDenoms?: Array<Record<string, unknown>>;
 };
 
 const median = (values: number[]) => {
@@ -81,8 +88,8 @@ async function refreshRegen(): Promise<RegenRefresh> {
       sell_orders?: Array<Record<string, unknown>>;
       sellOrders?: Array<Record<string, unknown>>;
     };
-    const denomData = denomsResponse?.ok
-      ? await denomsResponse.json() as { allowed_denoms?: Array<Record<string, unknown>>; allowedDenoms?: Array<Record<string, unknown>> }
+    const denomData: AllowedDenomsResponse = denomsResponse?.ok
+      ? await denomsResponse.json() as AllowedDenomsResponse
       : {};
 
     const exponentByDenom = new Map<string, number>();
@@ -110,7 +117,9 @@ async function refreshRegen(): Promise<RegenRefresh> {
       return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
     }, 0);
 
-    const askDenoms = Array.from(new Set(orders.map((order) => String(order.ask_denom || order.askDenom || "")).filter(Boolean)));
+    const askDenoms = Array.from(new Set(
+      orders.map((order) => String(order.ask_denom || order.askDenom || "")).filter(Boolean),
+    ));
     const usdPrices: number[] = [];
 
     for (const order of orders) {
@@ -124,7 +133,10 @@ async function refreshRegen(): Promise<RegenRefresh> {
 
       if ((displayDenom === "regen" || askDenom === "uregen") && regenUsd) {
         usdPrices.push(displayAmount * regenUsd);
-      } else if (["usdc", "uusdc", "usd", "usdt", "uusdt"].includes(displayDenom.toLowerCase()) || ["uusdc", "uusdt"].includes(askDenom.toLowerCase())) {
+      } else if (
+        ["usdc", "uusdc", "usd", "usdt", "uusdt"].includes(displayDenom.toLowerCase()) ||
+        ["uusdc", "uusdt"].includes(askDenom.toLowerCase())
+      ) {
         usdPrices.push(displayAmount);
       }
     }
@@ -174,7 +186,7 @@ async function refreshRegen(): Promise<RegenRefresh> {
   }
 }
 
-async function refreshChannel(sourceReference: string, url: string) {
+async function refreshChannel(sourceReference: string, url: string): Promise<ChannelRefresh> {
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -182,7 +194,7 @@ async function refreshChannel(sourceReference: string, url: string) {
       signal: AbortSignal.timeout(10000),
       headers: { "User-Agent": "EcoTracker/1.0", Accept: "text/html,application/xhtml+xml" },
     });
-    await response.body?.cancel().catch(() => undefined);
+    if (response.body) await response.body.cancel().catch(() => undefined);
     const reachable = response.ok;
     await pool.query(
       `UPDATE monitored_assets SET
@@ -190,7 +202,8 @@ async function refreshChannel(sourceReference: string, url: string) {
          monitor_details=jsonb_build_object('websiteStatus',$3::int,'checkedAt',NOW(),'note',$4::text),
          last_checked_at=NOW(),updated_at=NOW()
        WHERE source_reference=$1`,
-      [sourceReference, reachable ? "manual" : "degraded", response.status, reachable ? "Canal público online; preço e lote dependem de confirmação direta." : "Canal público respondeu com erro; cotação permanece assistida."],
+      [sourceReference, reachable ? "manual" : "degraded", response.status,
+        reachable ? "Canal público online; preço e lote dependem de confirmação direta." : "Canal público respondeu com erro; cotação permanece assistida."],
     );
     return { source: sourceReference, reachable, status: response.status };
   } catch (error) {
@@ -203,14 +216,14 @@ async function refreshChannel(sourceReference: string, url: string) {
 }
 
 async function executeRefresh(): Promise<MarketRefreshResult> {
-  const [fx, regen, ...channels] = await Promise.all([
+  const [fx, regen, ofp, coorest] = await Promise.all([
     refreshFx(),
     refreshRegen(),
     refreshChannel("ofp-projects", "https://www.openforestprotocol.org/"),
     refreshChannel("coorest-removals", "https://coorest.eu/"),
   ]);
   lastCompletedAt = Date.now();
-  return { fx, regen, channels, refreshedAt: new Date(lastCompletedAt).toISOString() };
+  return { fx, regen, channels: [ofp, coorest], refreshedAt: new Date(lastCompletedAt).toISOString() };
 }
 
 export async function refreshMarketData(): Promise<MarketRefreshResult> {
