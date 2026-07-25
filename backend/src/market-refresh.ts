@@ -9,21 +9,22 @@ type RegenRefresh = {
   pricingOrders: number;
   sourcePriceUsdTon: number | null;
   askDenoms: string[];
+  publishedOrders: number;
 } | null;
 
 type ChannelRefresh = { source: string; reachable: boolean; status: number | null };
-
-type MarketRefreshResult = {
-  cached?: boolean;
-  fx: number | null;
-  regen: RegenRefresh;
-  channels: ChannelRefresh[];
-  refreshedAt: string;
-};
-
-type AllowedDenomsResponse = {
-  allowed_denoms?: Array<Record<string, unknown>>;
-  allowedDenoms?: Array<Record<string, unknown>>;
+type MarketRefreshResult = { cached?: boolean; fx: number | null; regen: RegenRefresh; channels: ChannelRefresh[]; refreshedAt: string };
+type AllowedDenomsResponse = { allowed_denoms?: Array<Record<string, unknown>>; allowedDenoms?: Array<Record<string, unknown>> };
+type PricedOrder = {
+  id: string;
+  batchDenom: string;
+  quantity: number;
+  priceUsdTon: number;
+  askDenom: string;
+  askAmount: string;
+  displayDenom: string;
+  disableAutoRetire: boolean;
+  expiration: string | null;
 };
 
 const median = (values: number[]) => {
@@ -36,8 +37,7 @@ const median = (values: number[]) => {
 async function refreshFx(): Promise<number | null> {
   try {
     const response = await fetch("https://api.frankfurter.app/latest?from=USD&to=BRL", {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000), headers: { Accept: "application/json" },
     });
     if (!response.ok) return null;
     const data = await response.json() as { rates?: { BRL?: number } };
@@ -54,8 +54,7 @@ async function refreshFx(): Promise<number | null> {
 async function fetchRegenUsd(): Promise<number | null> {
   try {
     const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=regen&vs_currencies=usd", {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json", "User-Agent": "EcoTracker/1.0" },
+      signal: AbortSignal.timeout(8000), headers: { Accept: "application/json", "User-Agent": "EcoTracker/1.0" },
     });
     if (!response.ok) return null;
     const data = await response.json() as { regen?: { usd?: number } };
@@ -67,31 +66,72 @@ async function fetchRegenUsd(): Promise<number | null> {
   }
 }
 
+async function publishRegenOrders(orders: PricedOrder[], endpoint: string): Promise<number> {
+  await pool.query("UPDATE monitored_assets SET active=FALSE,updated_at=NOW() WHERE source_reference LIKE 'regen-order-%'");
+  const limit = Math.max(1, Math.min(50, Number(process.env.REGEN_PUBLISHED_ORDER_LIMIT || 20)));
+  const published = [...orders]
+    .filter((order) => order.quantity > 0 && order.priceUsdTon > 0)
+    .sort((a, b) => a.priceUsdTon - b.priceUsdTon)
+    .slice(0, limit);
+
+  for (const order of published) {
+    const vintageMatch = order.batchDenom.match(/-(20\d{2})\d{4}-/);
+    const details = {
+      sellOrderId: order.id,
+      batchDenom: order.batchDenom,
+      askDenom: order.askDenom,
+      askAmount: order.askAmount,
+      displayDenom: order.displayDenom,
+      disableAutoRetire: order.disableAutoRetire,
+      autoRetireAvailable: !order.disableAutoRetire,
+      expiration: order.expiration,
+      endpoint,
+      checkedAt: new Date().toISOString(),
+      note: "Ordem pública on-chain com preço convertido. A execução final depende de liquidez, saldo e assinatura da carteira operacional.",
+    };
+    await pool.query(
+      `INSERT INTO monitored_assets
+        (registry,project_name,source_reference,source_url,vintage,asset_type,quality_tier,description,
+         source_price_usd_ton,fx_brl_usd,service_margin_pct,fixed_fee_brl,available_tons,min_order_kg,
+         pricing_mode,availability_status,source_status,monitor_details,last_checked_at,active)
+       VALUES('Regen Network',$1,$2,'https://app.regen.network/',$3,'carbon','screening',$4,$5,
+         COALESCE((SELECT fx_brl_usd FROM monitored_assets WHERE source_reference='regen-marketplace' LIMIT 1),5.5),
+         25,0,$6,100,'dynamic','indicative','connected',$7::jsonb,NOW(),TRUE)
+       ON CONFLICT(registry,source_reference) DO UPDATE SET
+         project_name=EXCLUDED.project_name,source_url=EXCLUDED.source_url,vintage=EXCLUDED.vintage,
+         description=EXCLUDED.description,source_price_usd_ton=EXCLUDED.source_price_usd_ton,
+         available_tons=EXCLUDED.available_tons,pricing_mode='dynamic',availability_status='indicative',
+         source_status='connected',monitor_details=EXCLUDED.monitor_details,last_checked_at=NOW(),active=TRUE,updated_at=NOW()`,
+      [
+        `Lote Regen ${order.batchDenom}`,
+        `regen-order-${order.id}`,
+        vintageMatch?.[1] || null,
+        `Oferta on-chain do lote ${order.batchDenom}. ${order.disableAutoRetire ? "Aposentadoria será executada após a aquisição." : "A ordem permite aposentadoria automática na compra."}`,
+        order.priceUsdTon,
+        order.quantity,
+        JSON.stringify(details),
+      ],
+    );
+  }
+  return published.length;
+}
+
 async function refreshRegen(): Promise<RegenRefresh> {
   const base = (process.env.REGEN_REST_URL || "https://rest.cosmos.directory/regen").replace(/\/$/, "");
   try {
     const [ordersResponse, denomsResponse, regenUsd] = await Promise.all([
       fetch(`${base}/regen/ecocredit/marketplace/v1/sell-orders?pagination.limit=200`, {
-        signal: AbortSignal.timeout(12000),
-        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(12000), headers: { Accept: "application/json" },
       }),
       fetch(`${base}/regen/ecocredit/marketplace/v1/allowed-denoms`, {
-        signal: AbortSignal.timeout(12000),
-        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(12000), headers: { Accept: "application/json" },
       }).catch(() => null),
       fetchRegenUsd(),
     ]);
-
     if (!ordersResponse.ok) throw new Error(`Regen REST ${ordersResponse.status}`);
 
-    const orderData = await ordersResponse.json() as {
-      sell_orders?: Array<Record<string, unknown>>;
-      sellOrders?: Array<Record<string, unknown>>;
-    };
-    const denomData: AllowedDenomsResponse = denomsResponse?.ok
-      ? await denomsResponse.json() as AllowedDenomsResponse
-      : {};
-
+    const orderData = await ordersResponse.json() as { sell_orders?: Array<Record<string, unknown>>; sellOrders?: Array<Record<string, unknown>> };
+    const denomData: AllowedDenomsResponse = denomsResponse?.ok ? await denomsResponse.json() as AllowedDenomsResponse : {};
     const exponentByDenom = new Map<string, number>();
     const displayByDenom = new Map<string, string>();
     for (const raw of denomData.allowed_denoms || denomData.allowedDenoms || []) {
@@ -111,75 +151,71 @@ async function refreshRegen(): Promise<RegenRefresh> {
       const expiration = order.expiration;
       return !expiration || Date.parse(String(expiration)) > now;
     });
-
     const availableTons = orders.reduce((sum, order) => {
       const quantity = Number(order.quantity);
       return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
     }, 0);
-
-    const askDenoms = Array.from(new Set(
-      orders.map((order) => String(order.ask_denom || order.askDenom || "")).filter(Boolean),
-    ));
-    const usdPrices: number[] = [];
+    const askDenoms = Array.from(new Set(orders.map((order) => String(order.ask_denom || order.askDenom || "")).filter(Boolean)));
+    const pricedOrders: PricedOrder[] = [];
 
     for (const order of orders) {
       const askDenom = String(order.ask_denom || order.askDenom || "");
-      const askAmount = Number(order.ask_amount || order.askAmount);
-      if (!askDenom || !Number.isFinite(askAmount) || askAmount <= 0) continue;
+      const askAmountRaw = String(order.ask_amount || order.askAmount || "");
+      const askAmount = Number(askAmountRaw);
+      const quantity = Number(order.quantity);
+      const id = String(order.id || "");
+      const batchDenom = String(order.batch_denom || order.batchDenom || "");
+      if (!id || !batchDenom || !askDenom || !Number.isFinite(askAmount) || askAmount <= 0 || !Number.isFinite(quantity) || quantity <= 0) continue;
 
       const exponent = exponentByDenom.get(askDenom) ?? (askDenom.startsWith("u") ? 6 : 0);
       const displayDenom = displayByDenom.get(askDenom) || askDenom;
       const displayAmount = askAmount / Math.pow(10, exponent);
-
-      if ((displayDenom === "regen" || askDenom === "uregen") && regenUsd) {
-        usdPrices.push(displayAmount * regenUsd);
+      let priceUsdTon: number | null = null;
+      if ((displayDenom.toLowerCase() === "regen" || askDenom.toLowerCase() === "uregen") && regenUsd) {
+        priceUsdTon = displayAmount * regenUsd;
       } else if (
         ["usdc", "uusdc", "usd", "usdt", "uusdt"].includes(displayDenom.toLowerCase()) ||
         ["uusdc", "uusdt"].includes(askDenom.toLowerCase())
       ) {
-        usdPrices.push(displayAmount);
+        priceUsdTon = displayAmount;
+      }
+      if (priceUsdTon && Number.isFinite(priceUsdTon) && priceUsdTon > 0) {
+        pricedOrders.push({
+          id, batchDenom, quantity, priceUsdTon, askDenom, askAmount: askAmountRaw, displayDenom,
+          disableAutoRetire: Boolean(order.disable_auto_retire || order.disableAutoRetire),
+          expiration: order.expiration ? String(order.expiration) : null,
+        });
       }
     }
 
-    const sourcePriceUsdTon = median(usdPrices);
+    const sourcePriceUsdTon = median(pricedOrders.map((order) => order.priceUsdTon));
     const details = {
       orderCount: orders.length,
-      pricingOrderCount: usdPrices.length,
+      pricingOrderCount: pricedOrders.length,
       askDenoms,
       regenUsd,
-      minSourceUsdTon: usdPrices.length ? Math.min(...usdPrices) : null,
+      minSourceUsdTon: pricedOrders.length ? Math.min(...pricedOrders.map((order) => order.priceUsdTon)) : null,
       medianSourceUsdTon: sourcePriceUsdTon,
-      maxSourceUsdTon: usdPrices.length ? Math.max(...usdPrices) : null,
+      maxSourceUsdTon: pricedOrders.length ? Math.max(...pricedOrders.map((order) => order.priceUsdTon)) : null,
       endpoint: base,
       checkedAt: new Date().toISOString(),
-      note: sourcePriceUsdTon
-        ? "Preço de referência calculado pela mediana das ordens cuja moeda pôde ser convertida. Execução ainda exige confirmação."
-        : "Volume e ordens lidos on-chain; preço executável depende da moeda e da liquidez de cada ordem.",
+      note: "Visão agregada do marketplace. Para cotação automática, escolha uma oferta individual abaixo.",
     };
-
     await pool.query(
-      `UPDATE monitored_assets
-       SET available_tons=$1,
-           availability_status=$2,
-           source_status='connected',
-           source_price_usd_ton=CASE WHEN $3::numeric IS NULL THEN source_price_usd_ton ELSE $3 END,
-           pricing_mode=CASE WHEN $3::numeric IS NULL THEN 'quote' ELSE 'dynamic' END,
-           monitor_details=$4::jsonb,
-           last_checked_at=NOW(),updated_at=NOW()
+      `UPDATE monitored_assets SET available_tons=$1,availability_status=$2,source_status='connected',
+         source_price_usd_ton=NULL,pricing_mode='quote',monitor_details=$3::jsonb,last_checked_at=NOW(),updated_at=NOW()
        WHERE source_reference='regen-marketplace'`,
-      [availableTons, orders.length ? "indicative" : "monitoring", sourcePriceUsdTon, JSON.stringify(details)],
+      [availableTons, orders.length ? "indicative" : "monitoring", JSON.stringify(details)],
     );
-
-    return { orders: orders.length, availableTons, pricingOrders: usdPrices.length, sourcePriceUsdTon, askDenoms };
+    const publishedOrders = await publishRegenOrders(pricedOrders, base);
+    return { orders: orders.length, availableTons, pricingOrders: pricedOrders.length, sourcePriceUsdTon, askDenoms, publishedOrders };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.warn("[market] Regen refresh failed", error);
     await pool.query(
-      `UPDATE monitored_assets
-       SET source_status='degraded',
-           monitor_details=jsonb_build_object('error',$1::text,'checkedAt',NOW(),'note','A última leitura ao vivo falhou; o catálogo continua disponível para cotação assistida.'),
-           last_checked_at=NOW(),updated_at=NOW()
-       WHERE source_reference='regen-marketplace'`,
+      `UPDATE monitored_assets SET source_status='degraded',
+         monitor_details=jsonb_build_object('error',$1::text,'checkedAt',NOW(),'note','A última leitura ao vivo falhou; o catálogo continua disponível para cotação assistida.'),
+         last_checked_at=NOW(),updated_at=NOW() WHERE source_reference='regen-marketplace'`,
       [message],
     );
     return null;
@@ -189,19 +225,15 @@ async function refreshRegen(): Promise<RegenRefresh> {
 async function refreshChannel(sourceReference: string, url: string): Promise<ChannelRefresh> {
   try {
     const response = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: AbortSignal.timeout(10000),
+      method: "GET", redirect: "follow", signal: AbortSignal.timeout(10000),
       headers: { "User-Agent": "EcoTracker/1.0", Accept: "text/html,application/xhtml+xml" },
     });
     if (response.body) await response.body.cancel().catch(() => undefined);
     const reachable = response.ok;
     await pool.query(
-      `UPDATE monitored_assets SET
-         source_status=$2,
+      `UPDATE monitored_assets SET source_status=$2,
          monitor_details=jsonb_build_object('websiteStatus',$3::int,'checkedAt',NOW(),'note',$4::text),
-         last_checked_at=NOW(),updated_at=NOW()
-       WHERE source_reference=$1`,
+         last_checked_at=NOW(),updated_at=NOW() WHERE source_reference=$1`,
       [sourceReference, reachable ? "manual" : "degraded", response.status,
         reachable ? "Canal público online; preço e lote dependem de confirmação direta." : "Canal público respondeu com erro; cotação permanece assistida."],
     );
@@ -216,8 +248,8 @@ async function refreshChannel(sourceReference: string, url: string): Promise<Cha
 }
 
 async function executeRefresh(): Promise<MarketRefreshResult> {
-  const [fx, regen, ofp, coorest] = await Promise.all([
-    refreshFx(),
+  const fx = await refreshFx();
+  const [regen, ofp, coorest] = await Promise.all([
     refreshRegen(),
     refreshChannel("ofp-projects", "https://www.openforestprotocol.org/"),
     refreshChannel("coorest-removals", "https://coorest.eu/"),
@@ -227,9 +259,7 @@ async function executeRefresh(): Promise<MarketRefreshResult> {
 }
 
 export async function refreshMarketData(): Promise<MarketRefreshResult> {
-  if (!inFlight) {
-    inFlight = executeRefresh().finally(() => { inFlight = null; });
-  }
+  if (!inFlight) inFlight = executeRefresh().finally(() => { inFlight = null; });
   return inFlight;
 }
 
