@@ -18,6 +18,8 @@ const fail = (res: Response, error: unknown) => {
   return res.status(status).json({ error: error instanceof Error ? error.message : "Erro interno" });
 };
 
+const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value || "";
+const queryOne = (value: unknown): string => Array.isArray(value) ? String(value[0] || "") : value == null ? "" : String(value);
 const centsToBrl = (value: unknown) => {
   const number = Number(value);
   return Number.isFinite(number) ? number / 100 : undefined;
@@ -26,7 +28,7 @@ const centsToBrl = (value: unknown) => {
 export function registerCommerceRoutes(app: Application) {
   app.get("/api/market/quotes/:publicCode", async (req: Request, res: Response) => {
     try {
-      const quote = await getPublicQuote(req.params.publicCode);
+      const quote = await getPublicQuote(one(req.params.publicCode));
       if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
       res.setHeader("Cache-Control", "no-store");
       return res.json(quote);
@@ -37,14 +39,14 @@ export function registerCommerceRoutes(app: Application) {
     const parsed = z.object({ method: z.enum(["pix", "card"]) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Método de pagamento inválido" });
     try {
-      const checkout = await createCheckout(req.params.publicCode, parsed.data.method);
+      const checkout = await createCheckout(one(req.params.publicCode), parsed.data.method);
       return res.status(201).json(checkout);
     } catch (error) { return fail(res, error); }
   });
 
   app.get("/api/market/quotes/:publicCode/receipt", async (req: Request, res: Response) => {
     try {
-      const html = await buildReceiptHtml(req.params.publicCode);
+      const html = await buildReceiptHtml(one(req.params.publicCode));
       if (!html) return res.status(404).send("Recibo ainda não disponível");
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "private, no-store");
@@ -53,7 +55,7 @@ export function registerCommerceRoutes(app: Application) {
   });
 
   app.post("/api/webhooks/woovi/:secret", async (req: Request, res: Response) => {
-    if (!process.env.WOOVI_WEBHOOK_SECRET || req.params.secret !== process.env.WOOVI_WEBHOOK_SECRET) {
+    if (!process.env.WOOVI_WEBHOOK_SECRET || one(req.params.secret) !== process.env.WOOVI_WEBHOOK_SECRET) {
       return res.status(401).json({ error: "Webhook não autorizado" });
     }
     const body = req.body as Record<string, unknown>;
@@ -81,10 +83,12 @@ export function registerCommerceRoutes(app: Application) {
 
   app.post("/api/webhooks/mercadopago", async (req: Request, res: Response) => {
     const body = req.body as Record<string, unknown>;
-    const queryData = req.query.data as Record<string, unknown> | undefined;
-    const bodyData = body.data as Record<string, unknown> | undefined;
-    const paymentId = String(queryData?.id || bodyData?.id || body.id || "");
-    const type = String(req.query.type || body.type || body.topic || "payment");
+    const bodyData = body.data && typeof body.data === "object" ? body.data as Record<string, unknown> : {};
+    const nestedQuery = req.query.data && typeof req.query.data === "object" && !Array.isArray(req.query.data)
+      ? req.query.data as Record<string, unknown>
+      : {};
+    const paymentId = queryOne(req.query["data.id"] || req.query.id || nestedQuery.id || bodyData.id || body.id);
+    const type = queryOne(req.query.type || body.type || body.topic || "payment");
     if (!paymentId || !["payment", "payments"].includes(type)) return res.status(200).json({ received: true, ignored: true });
     try {
       const payment = await fetchMercadoPagoPayment(paymentId);
@@ -120,7 +124,7 @@ export function registerCommerceRoutes(app: Application) {
       const { rows } = await pool.query(
         `UPDATE automation_jobs SET status='pending',attempts=0,run_after=NOW(),last_error=NULL,completed_at=NULL,updated_at=NOW()
          WHERE id=$1 RETURNING *`,
-        [req.params.id],
+        [one(req.params.id)],
       );
       if (!rows[0]) return res.status(404).json({ error: "Job não encontrado" });
       return res.json(rows[0]);
@@ -135,7 +139,7 @@ export function registerCommerceRoutes(app: Application) {
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Etapa inválida" });
     try {
-      await markManualWorkflowStage({ quoteId: Number(req.params.id), ...parsed.data });
+      await markManualWorkflowStage({ quoteId: Number(one(req.params.id)), ...parsed.data });
       return res.json({ success: true });
     } catch (error) { return fail(res, error); }
   });
@@ -158,7 +162,7 @@ export function registerCommerceRoutes(app: Application) {
         `UPDATE quote_requests SET source_cost_brl=$2,final_total=$3,gross_revenue_brl=$3,
            gross_profit_brl=$4,tax_reserve_brl=$5,net_profit_brl=$6,status='quoted',quote_expires_at=$7,
            pricing_snapshot=pricing_snapshot || $8::jsonb,updated_at=NOW() WHERE id=$1 RETURNING *`,
-        [req.params.id, parsed.data.sourceCostBrl, parsed.data.finalTotalBrl, grossProfit, taxReserve, netProfit, expiresAt,
+        [one(req.params.id), parsed.data.sourceCostBrl, parsed.data.finalTotalBrl, grossProfit, taxReserve, netProfit, expiresAt,
           JSON.stringify({ pricingMode: "manual", repricedAt: new Date().toISOString() })],
       );
       if (!rows[0]) return res.status(404).json({ error: "Cotação não encontrada" });
