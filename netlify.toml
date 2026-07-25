@@ -3,6 +3,14 @@
   command = "npm install && npm run build"
   publish = "dist"
 
+# A API fica disponível no mesmo domínio do frontend.
+# Isso elimina divergência de VITE_API_URL e problemas de CORS.
+[[redirects]]
+  from = "/api/*"
+  to = "https://ecotracker-api-cik7.onrender.com/api/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -14,7 +22,7 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
     Pragma = "no-cache"
     Expires = "0"
-    X-EcoTracker-Origin = "github-netlify"
+    X-EcoTracker-Origin = "ecotracker10-netlify"
 
 [[headers]]
   for = "/index.html"
@@ -22,4 +30,4 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
     Pragma = "no-cache"
     Expires = "0"
-    X-EcoTracker-Origin = "github-netlify"
+    X-EcoTracker-Origin = "ecotracker10-netlify"

@@ -1,0 +1,27 @@
+.marketplace-nav{color:var(--green)!important;font-weight:700}
+.market-footer a{display:block;color:var(--green);font-size:12px;margin-top:6px}
+.live-status{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:28px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#08160f;width:fit-content;max-width:100%}
+.live-status b{font-size:10px;letter-spacing:.12em;color:var(--green)}
+.live-status small{color:#80968a}
+.live-status button{margin-left:auto;background:transparent;color:white;border:1px solid #315b40;padding:8px 11px}
+.ecot-explainer{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 max(6vw,24px) 48px}
+.ecot-explainer>div{background:linear-gradient(145deg,#0f2418,#09150f);border:1px solid #294b36;border-radius:15px;padding:22px}
+.ecot-explainer small,.ecot-explainer strong,.ecot-explainer span{display:block}
+.ecot-explainer small{color:#789084;font-size:9px;letter-spacing:.14em}
+.ecot-explainer strong{font-family:'Space Grotesk';font-size:29px;color:var(--green);margin:9px 0}
+.ecot-explainer span{color:#a0b4a9;line-height:1.5;font-size:13px}
+.market-notice{margin:0 max(6vw,24px) 10px;padding:13px 15px;border:1px solid #6c5a2d;background:#2b2411;color:#f1d998;border-radius:10px}
+.loading-line{margin:15px max(6vw,24px);display:flex;align-items:center;gap:9px;color:#91a99d}
+.loading-line span{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:marketPulse 1.1s infinite alternate}
+@keyframes marketPulse{to{opacity:.25;transform:scale(.75)}}
+.live-metrics{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 0}
+.live-metrics span{font-size:9px;color:#8fa398;border:1px solid var(--line);border-radius:20px;padding:5px 8px}
+.live-metrics b{color:#d8e9df}
+.data-methodology{margin:0 max(6vw,24px) 65px;padding:32px;border:1px solid var(--line);border-radius:17px;background:#08160f;display:grid;grid-template-columns:.7fr 1fr 1fr;gap:28px;align-items:start}
+.data-methodology h2{font-family:'Space Grotesk';font-size:32px;margin:10px 0 0}
+.data-methodology p{margin:0;color:#91a99d;line-height:1.65}
+.data-methodology strong{color:#dcebe3}
+.monitored-card{min-height:570px}
+.asset-update{line-height:1.45}
+@media(max-width:1000px){.ecot-explainer{grid-template-columns:1fr}.data-methodology{grid-template-columns:1fr}}
+@media(max-width:650px){.live-status{width:100%;align-items:flex-start}.live-status button{width:100%;margin-left:0}.ecot-explainer{margin-bottom:28px}.data-methodology{padding:24px}}

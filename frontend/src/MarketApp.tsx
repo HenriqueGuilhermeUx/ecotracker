@@ -3,6 +3,7 @@ import LegacyApp from "./App";
 import { MarketCatalog } from "./MarketCatalog";
 import { MarketAdmin } from "./MarketAdmin";
 import "./market.css";
+import "./market-live.css";
 
 export default function MarketApp() {
   const [page, setPage] = useState(location.hash.replace("#", "") || "home");

@@ -31,6 +31,7 @@ export async function initMarketDb(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(registry, source_reference)
     );
+
     CREATE TABLE IF NOT EXISTS quote_requests (
       id BIGSERIAL PRIMARY KEY,
       public_code UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
@@ -53,17 +54,27 @@ export async function initMarketDb(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
     CREATE INDEX IF NOT EXISTS quote_requests_status_idx ON quote_requests(status, created_at DESC);
     CREATE INDEX IF NOT EXISTS monitored_assets_active_idx ON monitored_assets(active, updated_at DESC);
   `);
+
   await pool.query(`
     INSERT INTO monitored_assets
-      (registry,project_name,source_reference,source_url,asset_type,quality_tier,description,pricing_mode,availability_status,source_status,min_order_kg)
+      (registry,project_name,source_reference,source_url,asset_type,quality_tier,description,pricing_mode,availability_status,source_status,min_order_kg,active)
     VALUES
-      ('Regen Network','Eco-créditos do Regen Marketplace','regen-marketplace','https://app.regen.network/','carbon','screening','Ordens públicas do marketplace on-chain. Disponibilidade e preço final são confirmados antes da cobrança.','quote','monitoring','connected',100),
-      ('Open Forest Protocol','Projetos de reflorestamento OFP','ofp-projects','https://www.openforestprotocol.org/','carbon-removal','premium','Projetos florestais com monitoramento digital. Operação depende de cotação e confirmação do desenvolvedor.','quote','monitoring','manual',1000),
-      ('Coorest Carbon Standard','Créditos de remoção Coorest','coorest-removals','https://coorest.eu/','carbon-removal','premium','Ativos de remoção monitorados digitalmente. A fonte e o lote são validados antes da proposta.','quote','monitoring','manual',100)
-    ON CONFLICT (registry,source_reference) DO NOTHING;
+      ('Regen Network','Eco-créditos do Regen Marketplace','regen-marketplace','https://app.regen.network/','carbon','screening','Ordens públicas on-chain. Volume, moedas e referências de preço são monitorados; a execução é confirmada antes da cobrança.','quote','monitoring','connected',100,TRUE),
+      ('Open Forest Protocol','Projetos de reflorestamento OFP','ofp-projects','https://www.openforestprotocol.org/','carbon-removal','premium','Projetos florestais com monitoramento digital. O EcoTracker solicita lote, preço e prazo diretamente ao canal de originação.','quote','monitoring','manual',1000,TRUE),
+      ('Coorest Carbon Standard','Créditos de remoção Coorest','coorest-removals','https://coorest.eu/','carbon-removal','premium','Ativos de remoção monitorados digitalmente. A fonte, o lote e as condições comerciais são validados antes da proposta.','quote','monitoring','manual',100,TRUE)
+    ON CONFLICT (registry,source_reference) DO UPDATE SET
+      project_name=EXCLUDED.project_name,
+      source_url=EXCLUDED.source_url,
+      asset_type=EXCLUDED.asset_type,
+      quality_tier=EXCLUDED.quality_tier,
+      description=EXCLUDED.description,
+      min_order_kg=EXCLUDED.min_order_kg,
+      active=TRUE,
+      updated_at=NOW();
   `);
 }
 
