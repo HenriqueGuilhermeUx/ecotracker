@@ -79,7 +79,7 @@ export default function AssetDetailScreen() {
       </View>
 
       <View style={styles.transparencyCard}>
-        <View style={styles.transparencyIcon}><MaterialCommunityIcons name="shield-search-outline" size={24} color={colors.blue} /></View>
+        <View style={styles.transparencyIcon}><MaterialCommunityIcons name="shield-check-outline" size={24} color={colors.blue} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.blockTitle}>Transparência da fonte</Text>
           <Text style={styles.blockCopy}>{asset.monitor_details?.note || "O EcoTracker valida lote, preço, disponibilidade e regra de aposentadoria antes do pagamento."}</Text>
