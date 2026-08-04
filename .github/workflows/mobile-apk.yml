@@ -1,0 +1,58 @@
+name: EcoTracker Android APK
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-apk.yml"
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --silent
+
+      - name: Generate native Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build installable APK
+        working-directory: mobile/android
+        env:
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare artifact
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk ecotracker-preview.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-preview-apk
+          path: ecotracker-preview.apk
+          if-no-files-found: error
+          retention-days: 30
