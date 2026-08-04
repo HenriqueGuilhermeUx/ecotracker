@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type ScrollViewProps,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -164,8 +163,6 @@ export function LoadingBlock({ label = "Sincronizando..." }: { label?: string })
   return <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.loadingText}>{label}</Text></View>;
 }
 
-export const cardStyle = styles.card;
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   screenContent: { paddingHorizontal: spacing.xl, paddingBottom: 120, backgroundColor: colors.background, flexGrow: 1 },
@@ -189,7 +186,6 @@ const styles = StyleSheet.create({
   statusNeutral: { borderColor: colors.border, backgroundColor: colors.surface },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
-  card: { borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...shadow },
   empty: { padding: spacing.xxxl, alignItems: "center", justifyContent: "center", borderRadius: radius.lg, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderStrong, backgroundColor: colors.surface, gap: spacing.md },
   emptyIcon: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryMuted },
   emptyTitle: { color: colors.text, fontSize: typography.subheading, fontWeight: "800", textAlign: "center" },
