@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "EcoTracker",
+    "slug": "ecotracker-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "ecotracker",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "backgroundColor": "#06100c",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.alternativeventures.ecotracker",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": []
+    },
+    "ios": {
+      "bundleIdentifier": "com.alternativeventures.ecotracker",
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "company": "Alternative Ventures Ltda",
+      "cnpj": "61.920.356/0001-38"
+    }
+  }
+}

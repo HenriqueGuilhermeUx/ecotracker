@@ -22,24 +22,8 @@ jobs:
         run: npm install --include=dev --silent
 
       - name: Backend typecheck
-        id: backend_typecheck
         working-directory: backend
-        shell: bash
-        run: |
-          set +e
-          npm run check -- --pretty false > backend-typecheck.log 2>&1
-          status=$?
-          cat backend-typecheck.log
-          exit $status
-
-      - name: Upload backend diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-typecheck-log
-          path: backend/backend-typecheck.log
-          if-no-files-found: ignore
-          retention-days: 1
+        run: npm run check -- --pretty false
 
       - name: Backend build
         working-directory: backend
@@ -52,3 +36,17 @@ jobs:
       - name: Frontend build
         working-directory: frontend
         run: npm run build
+
+      - name: Mobile install
+        working-directory: mobile
+        run: npm install --silent
+
+      - name: Mobile typecheck
+        working-directory: mobile
+        run: npm run typecheck -- --pretty false
+
+      - name: Mobile Android bundle
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo export --platform android --output-dir dist
