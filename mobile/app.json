@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "EcoTracker",
+    "slug": "ecotracker-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "ecotracker",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "backgroundColor": "#06100c",
+    "splash": {
+      "backgroundColor": "#06100c",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "package": "com.alternativeventures.ecotracker",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#06100c"
+      },
+      "permissions": []
+    },
+    "ios": {
+      "bundleIdentifier": "com.alternativeventures.ecotracker",
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "company": "Alternative Ventures Ltda",
+      "cnpj": "61.920.356/0001-38"
+    }
+  }
+}
