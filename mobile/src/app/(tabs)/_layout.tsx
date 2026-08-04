@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import type { ColorValue } from "react-native";
 import { colors } from "../../theme";
 
 const icon = (name: keyof typeof MaterialCommunityIcons.glyphMap) =>
-  ({ color, size }: { color: string; size: number }) => <MaterialCommunityIcons name={name} color={color} size={size} />;
+  ({ color, size }: { color: ColorValue; size: number }) => <MaterialCommunityIcons name={name} color={String(color)} size={size} />;
 
 export default function TabsLayout() {
   return (
