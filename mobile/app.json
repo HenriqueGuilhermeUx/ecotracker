@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EcoTracker",
-    "slug": "ecotracker-mobile",
+    "slug": "ecotracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "ecotracker",
@@ -38,7 +38,10 @@
     },
     "extra": {
       "company": "Alternative Ventures Ltda",
-      "cnpj": "61.920.356/0001-38"
+      "cnpj": "61.920.356/0001-38",
+      "eas": {
+        "projectId": "9746d183-5a05-435a-aeb6-b893002b7cb4"
+      }
     }
   }
 }
