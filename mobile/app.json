@@ -8,21 +8,30 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "backgroundColor": "#06100c",
-    "splash": {
-      "backgroundColor": "#06100c",
-      "resizeMode": "contain"
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
     },
     "android": {
       "package": "com.alternativeventures.ecotracker",
       "versionCode": 1,
-      "adaptiveIcon": {
-        "backgroundColor": "#06100c"
-      },
+      "edgeToEdgeEnabled": true,
       "permissions": []
     },
     "ios": {
       "bundleIdentifier": "com.alternativeventures.ecotracker",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "web": {
       "bundler": "metro"
