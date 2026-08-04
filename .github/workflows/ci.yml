@@ -44,3 +44,9 @@ jobs:
       - name: Mobile typecheck
         working-directory: mobile
         run: npm run typecheck -- --pretty false
+
+      - name: Mobile Android bundle
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo export --platform android --output-dir dist
