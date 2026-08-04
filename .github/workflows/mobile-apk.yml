@@ -1,4 +1,4 @@
-name: EcoTracker Android APK
+name: EcoTracker Android Standalone APK
 
 on:
   pull_request:
@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
+  build-release-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,24 +35,35 @@ jobs:
         working-directory: mobile
         env:
           CI: "1"
+          NODE_ENV: production
           EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
         run: npx expo prebuild --platform android --clean
 
-      - name: Build installable APK
+      - name: Build standalone release APK
         working-directory: mobile/android
         env:
+          CI: "1"
+          NODE_ENV: production
           EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Verify embedded JavaScript bundle
+        run: |
+          APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          unzip -l "$APK" | tee /tmp/ecotracker-apk-files.txt
+          grep -q "assets/index.android.bundle" /tmp/ecotracker-apk-files.txt
+          echo "Standalone bundle verified: assets/index.android.bundle is packaged."
 
       - name: Prepare artifact
-        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk ecotracker-preview.apk
+        run: cp mobile/android/app/build/outputs/apk/release/app-release.apk EcoTracker-Standalone-Release.apk
 
-      - name: Upload APK
+      - name: Upload standalone APK
         uses: actions/upload-artifact@v4
         with:
-          name: ecotracker-preview-apk
-          path: ecotracker-preview.apk
+          name: ecotracker-standalone-release-apk
+          path: EcoTracker-Standalone-Release.apk
           if-no-files-found: error
           retention-days: 30
