@@ -1,9 +1,11 @@
 import express from "express";
 import { initMarketDb } from "./market-db.js";
 import { initCommerceDb } from "./commerce-db.js";
+import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerMarketRoutes } from "./market-routes.js";
+import { registerPrivacyRoutes } from "./privacy-routes.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
 const proto = express.application as unknown as {
@@ -29,11 +31,13 @@ if (!proto.__marketInstalled) {
         return res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
       }
     });
+    registerPrivacyRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
     // quote_requests nasce em initMarketDb e só depois recebe as colunas comerciais.
     void initMarketDb()
       .then(() => initCommerceDb())
+      .then(() => initPrivacyDb())
       .then(() => {
         startCommerceWorker();
         return original.apply(this, args);
