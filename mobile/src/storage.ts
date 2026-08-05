@@ -49,3 +49,11 @@ export async function loadRecommendation(): Promise<number> {
 
 export const saveRecommendation = (kg: number) =>
   SecureStore.setItemAsync(RECOMMENDATION_KEY, String(Math.max(1, Math.round(kg))));
+
+export async function clearLocalData(): Promise<void> {
+  await Promise.all([
+    SecureStore.deleteItemAsync(PROFILE_KEY),
+    SecureStore.deleteItemAsync(QUOTES_KEY),
+    SecureStore.deleteItemAsync(RECOMMENDATION_KEY),
+  ]);
+}
