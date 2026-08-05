@@ -1,15 +1,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { Field, SegmentedControl } from "../../components/forms";
 import { Eyebrow, PrimaryButton, ScalePressable, Screen, SectionHeader } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { colors, radius, spacing, typography } from "../../theme";
 import type { LocalProfile } from "../../types";
 
+const SITE = "https://ecotracker10.netlify.app";
+
 export default function ProfileScreen() {
-  const { profile, updateProfile, quoteCodes } = useApp();
+  const { profile, updateProfile, quoteCodes, deleteLocalData } = useApp();
   const [form, setForm] = useState<LocalProfile>(profile);
   const [saved, setSaved] = useState(false);
 
@@ -25,11 +27,32 @@ export default function ProfileScreen() {
     setSaved(true);
   }
 
+  function confirmLocalDeletion() {
+    Alert.alert(
+      "Apagar dados deste aparelho?",
+      "O perfil, as preferências, a recomendação de pegada e os códigos de cotação salvos serão removidos. Dados já enviados em operações precisam ser solicitados separadamente.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Apagar",
+          style: "destructive",
+          onPress: () => {
+            void deleteLocalData().then(() => {
+              setForm({ name: "", email: "", phone: "", companyName: "", taxId: "", preferredDelivery: "email", walletAddress: "" });
+              setSaved(false);
+              Alert.alert("Dados locais apagados", "O armazenamento seguro do EcoTracker foi limpo neste aparelho.");
+            });
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <Screen contentStyle={{ paddingTop: spacing.md }}>
       <Eyebrow>CONTA ECOTRACKER</Eyebrow>
       <Text style={styles.title}>Seus dados, no seu aparelho.</Text>
-      <Text style={styles.subtitle}>O perfil local agiliza novas cotações. Dados de pagamento nunca são armazenados pelo aplicativo.</Text>
+      <Text style={styles.subtitle}>O perfil local agiliza novas cotações. Dados completos de cartão nunca são armazenados pelo aplicativo.</Text>
 
       <View style={styles.identityCard}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{form.name ? form.name.charAt(0).toUpperCase() : "E"}</Text></View>
@@ -68,11 +91,25 @@ export default function ProfileScreen() {
         <PrimaryButton title={saved ? "Perfil salvo" : "Salvar preferências"} icon={saved ? "check-circle-outline" : "content-save-outline"} onPress={() => void save()} />
       </View>
 
-      <SectionHeader title="Transparência" subtitle="Informações institucionais e regras da plataforma." />
+      <SectionHeader title="Privacidade e dados" subtitle="Controles disponíveis dentro e fora do aplicativo." />
       <View style={styles.linksCard}>
-        <LinkRow icon="web" label="Site oficial" onPress={() => void WebBrowser.openBrowserAsync("https://ecotracker10.netlify.app")} />
-        <LinkRow icon="file-document-outline" label="Termos e privacidade" onPress={() => void WebBrowser.openBrowserAsync("https://ecotracker10.netlify.app/#home")} />
-        <LinkRow icon="shield-check-outline" label="Como protegemos o lastro" onPress={() => void WebBrowser.openBrowserAsync("https://ecotracker10.netlify.app/#marketplace")} />
+        <LinkRow icon="shield-lock-outline" label="Política de Privacidade" onPress={() => void WebBrowser.openBrowserAsync(`${SITE}/privacy/`)} />
+        <LinkRow icon="file-document-outline" label="Termos de Uso" onPress={() => void WebBrowser.openBrowserAsync(`${SITE}/terms/`)} />
+        <LinkRow icon="account-remove-outline" label="Solicitar exclusão no servidor" onPress={() => void WebBrowser.openBrowserAsync(`${SITE}/delete-account/`)} />
+      </View>
+      <ScalePressable onPress={confirmLocalDeletion} style={styles.deleteButton}>
+        <MaterialCommunityIcons name="delete-outline" size={21} color={colors.danger} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.deleteTitle}>Apagar dados deste aparelho</Text>
+          <Text style={styles.deleteSubtitle}>Remove imediatamente perfil, preferências e códigos locais.</Text>
+        </View>
+      </ScalePressable>
+
+      <SectionHeader title="Transparência e suporte" subtitle="Informações institucionais e canais oficiais." />
+      <View style={styles.linksCard}>
+        <LinkRow icon="web" label="Site oficial" onPress={() => void WebBrowser.openBrowserAsync(SITE)} />
+        <LinkRow icon="lifebuoy" label="Suporte" onPress={() => void WebBrowser.openBrowserAsync(`${SITE}/support/`)} />
+        <LinkRow icon="shield-check-outline" label="Ativos e lastro monitorados" onPress={() => void WebBrowser.openBrowserAsync(`${SITE}/#marketplace`)} />
       </View>
 
       <View style={styles.company}>
@@ -109,6 +146,9 @@ const styles = StyleSheet.create({
   linkRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   linkIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryMuted },
   linkLabel: { flex: 1, color: colors.text, fontSize: 14, fontWeight: "700" },
+  deleteButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.danger, backgroundColor: "rgba(255,107,107,0.06)" },
+  deleteTitle: { color: colors.danger, fontSize: 14, fontWeight: "900" },
+  deleteSubtitle: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3 },
   company: { flexDirection: "row", gap: spacing.sm, alignItems: "center", justifyContent: "center", marginTop: spacing.xxxl, paddingHorizontal: spacing.xl },
   companyText: { flex: 1, color: colors.textDim, fontSize: 10, lineHeight: 15, textAlign: "center" },
 });

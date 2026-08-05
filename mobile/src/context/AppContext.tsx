@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { LocalProfile } from "../types";
 import {
+  clearLocalData,
   emptyProfile,
   loadProfile,
   loadQuoteCodes,
@@ -20,6 +21,7 @@ type AppContextValue = {
   addQuote: (code: string) => Promise<void>;
   removeQuote: (code: string) => Promise<void>;
   updateRecommendation: (kg: number) => Promise<void>;
+  deleteLocalData: () => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -61,6 +63,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const next = Math.max(1, Math.round(kg));
       setRecommendationKg(next);
       await persistRecommendation(next);
+    },
+    deleteLocalData: async () => {
+      await clearLocalData();
+      setProfile(emptyProfile);
+      setQuoteCodes([]);
+      setRecommendationKg(100);
     },
   }), [hydrated, profile, quoteCodes, recommendationKg]);
 
