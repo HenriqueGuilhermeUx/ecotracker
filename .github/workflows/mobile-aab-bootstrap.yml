@@ -1,0 +1,167 @@
+name: EcoTracker Signed Play AAB Bootstrap
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-aab-bootstrap.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-signed-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --silent
+
+      - name: Generate native Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo prebuild --platform android --clean
+
+      - name: Generate permanent upload key
+        shell: bash
+        run: |
+          set -euo pipefail
+          STORE_PASSWORD="$(openssl rand -hex 24)"
+          KEY_PASSWORD="$(openssl rand -hex 24)"
+          KEY_ALIAS="ecotracker-upload"
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/mobile/android/app/ecotracker-upload-key.jks"
+
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_PASSWORD"
+
+          keytool -genkeypair \
+            -keystore "$KEYSTORE_PATH" \
+            -storetype JKS \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -dname "CN=EcoTracker, OU=Mobile, O=Alternative Ventures Ltda, L=Sao Paulo, ST=SP, C=BR"
+
+          {
+            echo "ECOT_UPLOAD_KEYSTORE=$KEYSTORE_PATH"
+            echo "ECOT_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ECOT_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+            echo "ECOT_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+          mkdir -p "$GITHUB_WORKSPACE/play-aab-output"
+          cat > "$GITHUB_WORKSPACE/play-aab-output/UPLOAD-KEY-CREDENTIALS.txt" <<EOF
+          ECOTRACKER — GOOGLE PLAY UPLOAD KEY
+
+          Package name: com.alternativeventures.ecotracker
+          App version: 1.0.1
+          Version code: 2
+          Alias: $KEY_ALIAS
+          Keystore password: $STORE_PASSWORD
+          Key password: $KEY_PASSWORD
+          Keystore file: ecotracker-upload-key.jks
+
+          IMPORTANT:
+          1. Keep this file and the JKS together in at least two secure backups.
+          2. Never commit the JKS or these passwords to GitHub.
+          3. Use this same upload key for every future update of this Play Store app.
+          4. Google Play App Signing may protect the app-signing key, but this upload key remains necessary to submit updates.
+          EOF
+
+      - name: Configure release signing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("mobile/android/app/build.gradle")
+          text = path.read_text(encoding="utf-8")
+
+          marker = "signingConfigs {"
+          if marker not in text:
+              raise SystemExit("signingConfigs block not found")
+
+          upload_block = '''signingConfigs {
+                  upload {
+                      storeFile file(System.getenv("ECOT_UPLOAD_KEYSTORE"))
+                      storePassword System.getenv("ECOT_UPLOAD_STORE_PASSWORD")
+                      keyAlias System.getenv("ECOT_UPLOAD_KEY_ALIAS")
+                      keyPassword System.getenv("ECOT_UPLOAD_KEY_PASSWORD")
+                  }
+          '''
+          text = text.replace(marker, upload_block, 1)
+
+          target = "signingConfig signingConfigs.debug"
+          position = text.rfind(target)
+          if position < 0:
+              raise SystemExit("release signingConfig not found")
+          text = text[:position] + "signingConfig signingConfigs.upload" + text[position + len(target):]
+
+          path.write_text(text, encoding="utf-8")
+          print("Release signing configured with the generated upload key.")
+
+      - name: Build signed Android App Bundle
+        working-directory: mobile/android
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Verify signed AAB and embedded bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB"
+          jarsigner -verify -verbose -certs "$AAB" | tee /tmp/ecotracker-aab-signature.txt
+          grep -q "jar verified" /tmp/ecotracker-aab-signature.txt
+          unzip -l "$AAB" | tee /tmp/ecotracker-aab-files.txt
+          grep -q "base/assets/index.android.bundle" /tmp/ecotracker-aab-files.txt
+
+      - name: Prepare publication package
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/play-aab-output"
+          cp mobile/android/app/build/outputs/bundle/release/app-release.aab "$OUT/EcoTracker-1.0.1-build2.aab"
+          cp "$ECOT_UPLOAD_KEYSTORE" "$OUT/ecotracker-upload-key.jks"
+          keytool -list -v \
+            -keystore "$ECOT_UPLOAD_KEYSTORE" \
+            -storepass "$ECOT_UPLOAD_STORE_PASSWORD" \
+            -alias "$ECOT_UPLOAD_KEY_ALIAS" > "$OUT/UPLOAD-KEY-CERTIFICATE.txt"
+          (
+            cd "$OUT"
+            sha256sum EcoTracker-1.0.1-build2.aab ecotracker-upload-key.jks > SHA256SUMS.txt
+          )
+
+      - name: Upload signed AAB and permanent key
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-google-play-aab-and-upload-key
+          path: play-aab-output/
+          if-no-files-found: error
+          retention-days: 7
