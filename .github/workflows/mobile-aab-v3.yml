@@ -1,0 +1,197 @@
+name: EcoTracker Google Play AAB v3
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-aab-v3.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-signed-aab-v3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download the permanent upload key from build 2
+        uses: actions/download-artifact@v4
+        with:
+          name: ecotracker-google-play-aab-and-upload-key
+          path: previous-upload-key
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 31024627200
+
+      - name: Load and protect signing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          CREDS="$GITHUB_WORKSPACE/previous-upload-key/UPLOAD-KEY-CREDENTIALS.txt"
+          KEYSTORE_SOURCE="$GITHUB_WORKSPACE/previous-upload-key/ecotracker-upload-key.jks"
+          test -f "$CREDS"
+          test -f "$KEYSTORE_SOURCE"
+
+          STORE_PASSWORD="$(sed -n 's/^Keystore password: //p' "$CREDS")"
+          KEY_PASSWORD="$(sed -n 's/^Key password: //p' "$CREDS")"
+          KEY_ALIAS="$(sed -n 's/^Alias: //p' "$CREDS")"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_PASSWORD"
+          test -n "$KEY_ALIAS"
+
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_PASSWORD"
+          echo "::add-mask::$KEY_ALIAS"
+
+          {
+            echo "ECOT_UPLOAD_KEYSTORE=$GITHUB_WORKSPACE/mobile/android/app/ecotracker-upload-key.jks"
+            echo "ECOT_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ECOT_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+            echo "ECOT_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+          mkdir -p "$GITHUB_WORKSPACE/mobile/android/app"
+          cp "$KEYSTORE_SOURCE" "$GITHUB_WORKSPACE/mobile/android/app/ecotracker-upload-key.jks"
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --silent
+
+      - name: Generate native Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo prebuild --platform android --clean
+
+      - name: Restore upload key after clean prebuild
+        shell: bash
+        run: |
+          cp "$GITHUB_WORKSPACE/previous-upload-key/ecotracker-upload-key.jks" "$ECOT_UPLOAD_KEYSTORE"
+
+      - name: Install definitive branded launcher resources
+        working-directory: mobile
+        run: node install-android-icons.cjs
+
+      - name: Verify native identity and icon resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'android:icon="@mipmap/ic_launcher"' mobile/android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' mobile/android/app/src/main/AndroidManifest.xml
+          test -f mobile/android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          test -f mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          test -f mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
+          grep -q 'versionCode 3' mobile/android/app/build.gradle
+          grep -q 'versionName "1.0.2"' mobile/android/app/build.gradle
+          sha256sum mobile/android/app/src/main/res/mipmap-*/ic_launcher.png
+
+      - name: Configure release signing with the permanent key
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("mobile/android/app/build.gradle")
+          text = path.read_text(encoding="utf-8")
+          marker = "signingConfigs {"
+          if marker not in text:
+              raise SystemExit("signingConfigs block not found")
+
+          upload_block = '''signingConfigs {
+                  upload {
+                      storeFile file(System.getenv("ECOT_UPLOAD_KEYSTORE"))
+                      storePassword System.getenv("ECOT_UPLOAD_STORE_PASSWORD")
+                      keyAlias System.getenv("ECOT_UPLOAD_KEY_ALIAS")
+                      keyPassword System.getenv("ECOT_UPLOAD_KEY_PASSWORD")
+                  }
+          '''
+          text = text.replace(marker, upload_block, 1)
+
+          target = "signingConfig signingConfigs.debug"
+          position = text.rfind(target)
+          if position < 0:
+              raise SystemExit("release signingConfig not found")
+          text = text[:position] + "signingConfig signingConfigs.upload" + text[position + len(target):]
+          path.write_text(text, encoding="utf-8")
+
+      - name: Build signed Android App Bundle version 3
+        working-directory: mobile/android
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Verify signature, JavaScript and launcher resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB"
+          jarsigner -verify -verbose -certs "$AAB" | tee /tmp/ecotracker-aab-signature.txt
+          grep -q "jar verified" /tmp/ecotracker-aab-signature.txt
+          unzip -l "$AAB" | tee /tmp/ecotracker-aab-files.txt
+          grep -q "base/assets/index.android.bundle" /tmp/ecotracker-aab-files.txt
+
+          curl -fsSL -o /tmp/bundletool.jar https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar
+          java -jar /tmp/bundletool.jar build-apks \
+            --bundle="$AAB" \
+            --output=/tmp/ecotracker.apks \
+            --mode=universal \
+            --ks="$ECOT_UPLOAD_KEYSTORE" \
+            --ks-pass="pass:$ECOT_UPLOAD_STORE_PASSWORD" \
+            --ks-key-alias="$ECOT_UPLOAD_KEY_ALIAS" \
+            --key-pass="pass:$ECOT_UPLOAD_KEY_PASSWORD"
+          unzip -p /tmp/ecotracker.apks universal.apk > /tmp/EcoTracker-universal.apk
+          unzip -l /tmp/EcoTracker-universal.apk | tee /tmp/ecotracker-universal-files.txt
+          grep -Eq "res/.*/ic_launcher" /tmp/ecotracker-universal-files.txt
+
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging /tmp/EcoTracker-universal.apk | tee /tmp/ecotracker-badging.txt
+          grep -q "package: name='com.alternativeventures.ecotracker' versionCode='3' versionName='1.0.2'" /tmp/ecotracker-badging.txt
+          grep -q "application-icon-" /tmp/ecotracker-badging.txt
+
+      - name: Prepare AAB artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p play-aab-v3
+          cp mobile/android/app/build/outputs/bundle/release/app-release.aab play-aab-v3/EcoTracker-1.0.2-build3.aab
+          cp /tmp/ecotracker-badging.txt play-aab-v3/ANDROID-BADGING.txt
+          keytool -list -v \
+            -keystore "$ECOT_UPLOAD_KEYSTORE" \
+            -storepass "$ECOT_UPLOAD_STORE_PASSWORD" \
+            -alias "$ECOT_UPLOAD_KEY_ALIAS" > play-aab-v3/UPLOAD-KEY-CERTIFICATE.txt
+          (
+            cd play-aab-v3
+            sha256sum EcoTracker-1.0.2-build3.aab > SHA256SUMS.txt
+          )
+
+      - name: Upload AAB version 3
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-google-play-aab-v3
+          path: play-aab-v3/
+          if-no-files-found: error
+          retention-days: 7
