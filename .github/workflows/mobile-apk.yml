@@ -39,6 +39,19 @@ jobs:
           EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
         run: npx expo prebuild --platform android --clean
 
+      - name: Install definitive EcoTracker launcher icons
+        working-directory: mobile
+        run: node install-android-icons.cjs
+
+      - name: Verify launcher resources before build
+        run: |
+          test -f mobile/android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          test -f mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
+          grep -q 'android:icon="@mipmap/ic_launcher"' mobile/android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' mobile/android/app/src/main/AndroidManifest.xml
+
       - name: Build standalone release APK
         working-directory: mobile/android
         env:
@@ -49,13 +62,14 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Verify embedded JavaScript bundle
+      - name: Verify embedded JavaScript bundle and launcher resources
         run: |
           APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
           test -f "$APK"
           unzip -l "$APK" | tee /tmp/ecotracker-apk-files.txt
           grep -q "assets/index.android.bundle" /tmp/ecotracker-apk-files.txt
-          echo "Standalone bundle verified: assets/index.android.bundle is packaged."
+          grep -Eq "res/mipmap-(mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi).*/ic_launcher" /tmp/ecotracker-apk-files.txt
+          echo "Standalone bundle and branded launcher resources verified."
 
       - name: Prepare artifact
         run: cp mobile/android/app/build/outputs/apk/release/app-release.apk EcoTracker-Standalone-Release.apk
