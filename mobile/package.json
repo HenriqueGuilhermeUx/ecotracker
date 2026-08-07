@@ -1,10 +1,11 @@
 {
   "name": "ecotracker-mobile",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
     "generate:icons": "node generate-icons.cjs",
+    "install:android-icons": "node install-android-icons.cjs",
     "start": "npm run generate:icons && expo start",
     "android": "npm run generate:icons && expo start --android",
     "web": "npm run generate:icons && expo start --web",
@@ -25,14 +26,14 @@
     "expo-status-bar": "~56.0.4",
     "expo-system-ui": "~56.0.5",
     "expo-web-browser": "~56.0.6",
-    "pngjs": "^7.0.0",
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-gesture-handler": "~2.31.1",
     "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-worklets": "0.8.3"
+    "react-native-worklets": "0.8.3",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/pngjs": "^6.0.5",
