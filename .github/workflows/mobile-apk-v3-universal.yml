@@ -1,0 +1,127 @@
+name: EcoTracker Universal APK v3
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-apk-v3-universal.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-universal-apk-v3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download validated AAB version 3
+        uses: actions/download-artifact@v4
+        with:
+          name: ecotracker-google-play-aab-v3
+          path: aab-input
+          github-token: ${{ github.token }}
+          repository: HenriqueGuilhermeUx/ecotracker
+          run-id: 31133700951
+
+      - name: Download permanent upload key
+        uses: actions/download-artifact@v4
+        with:
+          name: ecotracker-google-play-aab-and-upload-key
+          path: key-input
+          github-token: ${{ github.token }}
+          repository: HenriqueGuilhermeUx/ecotracker
+          run-id: 31024627200
+
+      - name: Load protected signing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          CREDS="$GITHUB_WORKSPACE/key-input/UPLOAD-KEY-CREDENTIALS.txt"
+          KEYSTORE="$GITHUB_WORKSPACE/key-input/ecotracker-upload-key.jks"
+          test -f "$CREDS"
+          test -f "$KEYSTORE"
+
+          STORE_PASSWORD="$(sed -n 's/^Keystore password: //p' "$CREDS")"
+          KEY_PASSWORD="$(sed -n 's/^Key password: //p' "$CREDS")"
+          KEY_ALIAS="$(sed -n 's/^Alias: //p' "$CREDS")"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_PASSWORD"
+          test -n "$KEY_ALIAS"
+
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_PASSWORD"
+          echo "::add-mask::$KEY_ALIAS"
+
+          {
+            echo "ECOT_KEYSTORE=$KEYSTORE"
+            echo "ECOT_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ECOT_KEY_ALIAS=$KEY_ALIAS"
+            echo "ECOT_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Download official bundletool
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output bundletool.jar \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
+          java -jar bundletool.jar version
+
+      - name: Generate signed universal APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="$GITHUB_WORKSPACE/aab-input/EcoTracker-1.0.2-build3.aab"
+          test -f "$AAB"
+
+          java -jar bundletool.jar build-apks \
+            --bundle="$AAB" \
+            --output=EcoTracker-1.0.2-build3.apks \
+            --mode=universal \
+            --ks="$ECOT_KEYSTORE" \
+            --ks-pass="pass:$ECOT_STORE_PASSWORD" \
+            --ks-key-alias="$ECOT_KEY_ALIAS" \
+            --key-pass="pass:$ECOT_KEY_PASSWORD"
+
+          unzip -j EcoTracker-1.0.2-build3.apks universal.apk -d output
+          mv output/universal.apk output/EcoTracker-1.0.2-build3.apk
+
+      - name: Verify package, version, icon and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$GITHUB_WORKSPACE/output/EcoTracker-1.0.2-build3.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$AAPT"
+          test -x "$APKSIGNER"
+
+          "$AAPT" dump badging "$APK" | tee output/APK-BADGING.txt
+          grep -q "package: name='com.alternativeventures.ecotracker' versionCode='3' versionName='1.0.2'" output/APK-BADGING.txt
+          grep -q "application-label:'EcoTracker'" output/APK-BADGING.txt
+          grep -q "application-icon" output/APK-BADGING.txt
+
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee output/APK-SIGNATURE.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" output/APK-SIGNATURE.txt
+
+          unzip -l "$APK" | grep -q "assets/index.android.bundle"
+          sha256sum "$APK" | tee output/SHA256SUMS.txt
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-universal-apk-v3
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
