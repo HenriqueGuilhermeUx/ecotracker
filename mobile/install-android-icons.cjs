@@ -107,15 +107,18 @@ function removeOldLauncherResources(directory) {
   }
 }
 
-function verifyVisible(png, label) {
+function verifyVisible(png, label, requireGreen = true) {
   let opaque = 0;
   let green = 0;
+  let bright = 0;
   for (let index = 0; index < png.data.length; index += 4) {
     if (png.data[index + 3] > 16) opaque += 1;
     if (png.data[index + 1] > png.data[index] * 1.4 && png.data[index + 1] > png.data[index + 2] * 1.2) green += 1;
+    if (png.data[index] + png.data[index + 1] + png.data[index + 2] > 420 && png.data[index + 3] > 16) bright += 1;
   }
   const pixels = png.width * png.height;
-  if (opaque < pixels * 0.08 || green < pixels * 0.02) {
+  const hasExpectedColor = requireGreen ? green >= pixels * 0.02 : bright >= pixels * 0.02;
+  if (opaque < pixels * 0.08 || !hasExpectedColor) {
     throw new Error(`${label} parece vazio ou sem a marca EcoTracker.`);
   }
 }
@@ -153,21 +156,18 @@ function installAndroidIcons() {
   const icon = readPng(path.join(ROOT, "assets", "icon.png"));
   const adaptive = readPng(path.join(ROOT, "assets", "adaptive-icon.png"));
   const monochrome = readPng(path.join(ROOT, "assets", "monochrome-icon.png"));
-  verifyVisible(icon, "Ícone principal");
-  verifyVisible(adaptive, "Ícone adaptativo");
-  verifyVisible(monochrome, "Ícone monocromático");
+  verifyVisible(icon, "Ícone principal", true);
+  verifyVisible(adaptive, "Ícone adaptativo", true);
+  verifyVisible(monochrome, "Ícone monocromático", false);
 
   for (const [density, sizes] of Object.entries(DENSITIES)) {
     const directory = path.join(RES, `mipmap-${density}`);
     fs.mkdirSync(directory, { recursive: true });
     removeOldLauncherResources(directory);
 
-    // Ícone legado completo, com fundo próprio e margem segura.
     const legacy = padded(icon, sizes.legacy, 0.94, DARK);
     writePng(path.join(directory, "ic_launcher.png"), legacy);
     writePng(path.join(directory, "ic_launcher_round.png"), legacy);
-
-    // Foreground adaptativo: marca menor dentro da zona segura para não ser cortada.
     writePng(path.join(directory, "ic_launcher_foreground.png"), padded(adaptive, sizes.adaptive, 0.66, [0, 0, 0, 0]));
     writePng(path.join(directory, "ic_launcher_monochrome.png"), padded(monochrome, sizes.adaptive, 0.66, [0, 0, 0, 0]));
   }
