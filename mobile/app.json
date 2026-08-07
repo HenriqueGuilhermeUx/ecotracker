@@ -2,7 +2,7 @@
   "expo": {
     "name": "EcoTracker",
     "slug": "ecotracker",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "scheme": "ecotracker",
     "userInterfaceStyle": "dark",
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.alternativeventures.ecotracker",
-      "versionCode": 2,
+      "versionCode": 3,
       "edgeToEdgeEnabled": true,
       "permissions": [],
       "adaptiveIcon": {
