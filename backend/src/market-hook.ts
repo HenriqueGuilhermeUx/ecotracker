@@ -4,6 +4,8 @@ import { initCommerceDb } from "./commerce-db.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
+import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
+import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
 import { registerMarketRoutes } from "./market-routes.js";
@@ -34,7 +36,10 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
-    // A trava de elegibilidade precisa ser registrada antes da criação pública de cotação.
+    // Carbonmark é registrado antes das rotas genéricas: sincroniza o catálogo e,
+    // para listings Carbonmark, trava o custo real da fonte antes da cobrança.
+    registerCarbonmarkRoutes(app);
+    // A trava de elegibilidade continua protegendo todas as demais fontes.
     registerEligibilityRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
@@ -44,7 +49,9 @@ if (!proto.__marketInstalled) {
       .then(() => initEligibilityDb())
       .then(() => initCommerceDb())
       .then(() => initPrivacyDb())
-      .then(() => {
+      .then(async () => {
+        // Não impede o boot se a Carbonmark estiver temporariamente indisponível.
+        await refreshCarbonmarkIfStale(0).catch((error) => console.warn("[carbonmark] initial refresh failed", error));
         startCommerceWorker();
         return original.apply(this, args);
       })
