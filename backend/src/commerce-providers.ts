@@ -1,3 +1,6 @@
+import { executeCarbonmarkRetirement } from "./carbonmark.js";
+import { pool } from "./db.js";
+
 type Buyer = {
   name: string;
   email: string;
@@ -143,10 +146,60 @@ export async function fetchMercadoPagoPayment(paymentId: string): Promise<Record
   });
 }
 
+async function executeCarbonmarkSource(payload: Record<string, unknown>): Promise<ExecutorResult> {
+  const sourceReference = String(payload.sourceReference || "");
+  if (!sourceReference.startsWith("carbonmark-")) throw new Error("Fonte Carbonmark inválida");
+  const quoteUuid = String(payload.sourceOrderId || "");
+  if (!quoteUuid) return { configured: true, status: "blocked", metadata: { reason: "Carbonmark quote UUID ausente" } };
+  if (!process.env.CARBONMARK_API_KEY) return { configured: false, status: "blocked", metadata: { reason: "CARBONMARK_API_KEY não configurada" } };
+
+  const result = await executeCarbonmarkRetirement({
+    quoteUuid,
+    beneficiaryName: String(payload.beneficiary || "EcoTracker beneficiary"),
+    retirementMessage: `EcoTracker ${String(payload.quoteCode || quoteUuid)} · ${String(payload.requestedKg || "")} kg CO2e`,
+  });
+
+  const metadata: Record<string, unknown> = {
+    provider: "carbonmark",
+    status: result.status,
+    viewRetirementUrl: result.viewRetirementUrl,
+    certificateUrl: result.certificateUrl,
+    provenanceUrl: result.provenanceUrl,
+    retirementId: result.retirementId,
+    raw: result.raw,
+  };
+
+  if (result.status === "completed") {
+    await pool.query(`
+      UPDATE quote_requests SET
+        retirement_reference=$2,
+        retirement_tx_hash=$3,
+        retired_at=COALESCE(retired_at,NOW()),
+        pricing_snapshot=pricing_snapshot || jsonb_build_object('carbonmarkRetirement',$4::jsonb),
+        updated_at=NOW()
+      WHERE public_code=$1`,
+      [String(payload.quoteCode || ""), result.reference, result.txHash, JSON.stringify(metadata)],
+    );
+  }
+
+  return {
+    configured: true,
+    status: result.status,
+    reference: result.reference,
+    txHash: result.txHash,
+    retired: result.status === "completed",
+    metadata,
+  };
+}
+
 export async function callCommerceExecutor(
   stage: "source" | "retire" | "deliver",
   payload: Record<string, unknown>,
 ): Promise<ExecutorResult> {
+  if (stage === "source" && String(payload.sourceReference || "").startsWith("carbonmark-")) {
+    return executeCarbonmarkSource(payload);
+  }
+
   const urlKey = stage === "source" ? "SOURCE_EXECUTOR_URL" : stage === "retire" ? "RETIREMENT_EXECUTOR_URL" : "DELIVERY_EXECUTOR_URL";
   const tokenKey = stage === "source" ? "SOURCE_EXECUTOR_TOKEN" : stage === "retire" ? "RETIREMENT_EXECUTOR_TOKEN" : "DELIVERY_EXECUTOR_TOKEN";
   const url = process.env[urlKey];
