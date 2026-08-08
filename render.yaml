@@ -40,6 +40,26 @@ services:
         value: "0"
       - key: ECOT_TAX_RESERVE_PCT
         value: "0"
+      - key: ECOT_MARKUP_1_24_PCT
+        value: "40"
+      - key: ECOT_MIN_FEE_1_24_BRL
+        value: "2.90"
+      - key: ECOT_MARKUP_25_99_PCT
+        value: "35"
+      - key: ECOT_MIN_FEE_25_99_BRL
+        value: "4.90"
+      - key: ECOT_MARKUP_100_999_PCT
+        value: "25"
+      - key: ECOT_MIN_FEE_100_999_BRL
+        value: "9.90"
+      - key: ECOT_MARKUP_1000_9999_PCT
+        value: "20"
+      - key: ECOT_MIN_FEE_1000_9999_BRL
+        value: "29.90"
+      - key: ECOT_MARKUP_10000_PLUS_PCT
+        value: "15"
+      - key: ECOT_MIN_FEE_10000_PLUS_BRL
+        value: "0"
       - key: ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS
         value: "5"
       - key: ECOT_ELIGIBILITY_MAX_AGE_HOURS
@@ -50,8 +70,12 @@ services:
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
         value: "15000"
+      - key: CARBONMARK_ENVIRONMENT
+        value: sandbox
       - key: CARBONMARK_API_BASE
-        value: https://v18.api.carbonmark.com
+        value: https://v19.api.carbonmark.com
+      - key: CARBONMARK_PUBLISHED_LISTING_LIMIT
+        value: "30"
       - key: CARBONMARK_API_KEY
         sync: false
       - key: WOOVI_APP_ID
