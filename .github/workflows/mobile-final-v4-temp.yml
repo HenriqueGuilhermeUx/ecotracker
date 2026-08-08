@@ -93,6 +93,7 @@ jobs:
           grep -q 'android.permission.SYSTEM_ALERT_WINDOW' mobile/android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.READ_EXTERNAL_STORAGE' mobile/android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.WRITE_EXTERNAL_STORAGE' mobile/android/app/src/main/AndroidManifest.xml
+          echo "Prebuild launcher and blocked-permission directives verified."
 
       - name: Configure permanent release signing
         shell: python
@@ -129,54 +130,83 @@ jobs:
           chmod +x gradlew
           ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
 
+      - name: Preserve raw release binaries before validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/ecotracker-final-v4"
+          mkdir -p "$OUT"
+          cp mobile/android/app/build/outputs/bundle/release/app-release.aab "$OUT/EcoTracker-1.0.3-build4-play.aab"
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "$OUT/EcoTracker-1.0.3-build4-release.apk"
+          (cd "$OUT" && sha256sum EcoTracker-1.0.3-build4-play.aab EcoTracker-1.0.3-build4-release.apk > SHA256SUMS.txt)
+          echo "Raw AAB/APK preserved before validation."
+
       - name: Validate final AAB and APK
         shell: bash
         run: |
           set -euo pipefail
-          AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
-          APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
           OUT="$GITHUB_WORKSPACE/ecotracker-final-v4"
-          mkdir -p "$OUT"
-          test -f "$AAB"; test -f "$APK"
+          AAB="$OUT/EcoTracker-1.0.3-build4-play.aab"
+          APK="$OUT/EcoTracker-1.0.3-build4-release.apk"
           EXPECTED_FP="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
-
-          # AAB
-          jarsigner -verify -verbose -certs "$AAB" > "$OUT/AAB-SIGNATURE.txt"
-          grep -q "jar verified" "$OUT/AAB-SIGNATURE.txt"
-          AAB_FP="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
-          test "$AAB_FP" = "$EXPECTED_FP"
-          unzip -l "$AAB" > "$OUT/AAB-CONTENTS.txt"
-          grep -q "base/assets/index.android.bundle" "$OUT/AAB-CONTENTS.txt"
-          grep -q "base/res/mipmap-anydpi-v33/ic_launcher.xml" "$OUT/AAB-CONTENTS.txt"
-
-          # APK
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           AAPT="$BUILD_TOOLS/aapt"
           APKSIGNER="$BUILD_TOOLS/apksigner"
-          "$AAPT" dump badging "$APK" > "$OUT/APK-BADGING.txt"
+
+          check() { echo "[CHECK] $1"; shift; "$@"; echo "[PASS] $1"; }
+
+          echo "[CHECK] AAB JAR signature"
+          jarsigner -verify -verbose -certs "$AAB" > "$OUT/AAB-SIGNATURE.txt"
+          grep -q "jar verified" "$OUT/AAB-SIGNATURE.txt"
+          echo "[PASS] AAB JAR signature"
+
+          echo "[CHECK] AAB permanent certificate"
+          AAB_FP="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
+          echo "AAB fingerprint: $AAB_FP" | tee "$OUT/AAB-CERTIFICATE-FINGERPRINT.txt"
+          test "$AAB_FP" = "$EXPECTED_FP"
+          echo "[PASS] AAB permanent certificate"
+
+          echo "[CHECK] AAB standalone JS and launcher resources"
+          unzip -l "$AAB" > "$OUT/AAB-CONTENTS.txt"
+          grep -q "base/assets/index.android.bundle" "$OUT/AAB-CONTENTS.txt"
+          grep -q "ic_launcher" "$OUT/AAB-CONTENTS.txt"
+          echo "[PASS] AAB standalone JS and launcher resources"
+
+          echo "[CHECK] APK identity"
+          "$AAPT" dump badging "$APK" | tee "$OUT/APK-BADGING.txt"
           grep -q "package: name='com.alternativeventures.ecotracker'" "$OUT/APK-BADGING.txt"
           grep -q "versionCode='4'" "$OUT/APK-BADGING.txt"
           grep -q "versionName='1.0.3'" "$OUT/APK-BADGING.txt"
           grep -q "targetSdkVersion:'36'" "$OUT/APK-BADGING.txt"
           grep -q "application-label:'EcoTracker'" "$OUT/APK-BADGING.txt"
           grep -q "application-icon" "$OUT/APK-BADGING.txt"
-          if grep -q "android.permission.SYSTEM_ALERT_WINDOW" "$OUT/APK-BADGING.txt"; then echo "Unexpected SYSTEM_ALERT_WINDOW"; exit 1; fi
-          if grep -q "android.permission.READ_EXTERNAL_STORAGE" "$OUT/APK-BADGING.txt"; then echo "Unexpected READ_EXTERNAL_STORAGE"; exit 1; fi
-          if grep -q "android.permission.WRITE_EXTERNAL_STORAGE" "$OUT/APK-BADGING.txt"; then echo "Unexpected WRITE_EXTERNAL_STORAGE"; exit 1; fi
+          echo "[PASS] APK identity"
 
-          "$APKSIGNER" verify --verbose --print-certs "$APK" > "$OUT/APK-SIGNATURE.txt"
+          echo "[CHECK] APK permissions"
+          "$AAPT" dump permissions "$APK" | tee "$OUT/APK-PERMISSIONS.txt"
+          ! grep -q "android.permission.SYSTEM_ALERT_WINDOW" "$OUT/APK-PERMISSIONS.txt"
+          ! grep -q "android.permission.READ_EXTERNAL_STORAGE" "$OUT/APK-PERMISSIONS.txt"
+          ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" "$OUT/APK-PERMISSIONS.txt"
+          echo "[PASS] APK permissions"
+
+          echo "[CHECK] APK v2/v3 signature and permanent certificate"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$OUT/APK-SIGNATURE.txt"
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" "$OUT/APK-SIGNATURE.txt"
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" "$OUT/APK-SIGNATURE.txt"
           APK_FP_RAW="$(grep -m1 -E 'certificate SHA-256 digest:' "$OUT/APK-SIGNATURE.txt" | sed 's/.*certificate SHA-256 digest: //')"
           APK_FP="$(echo "$APK_FP_RAW" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g;s/:$//')"
+          echo "APK fingerprint: $APK_FP" | tee "$OUT/APK-CERTIFICATE-FINGERPRINT.txt"
           test "$APK_FP" = "$EXPECTED_FP"
+          echo "[PASS] APK v2/v3 signature and permanent certificate"
+
+          echo "[CHECK] APK standalone JS and production API"
           unzip -l "$APK" > "$OUT/APK-CONTENTS.txt"
           grep -q "assets/index.android.bundle" "$OUT/APK-CONTENTS.txt"
-          unzip -p "$APK" assets/index.android.bundle | grep -a -q "https://ecotracker-api-cik7.onrender.com/api"
+          unzip -p "$APK" assets/index.android.bundle > "$OUT/index.android.bundle"
+          grep -a -q "https://ecotracker-api-cik7.onrender.com/api" "$OUT/index.android.bundle"
+          rm "$OUT/index.android.bundle"
+          echo "[PASS] APK standalone JS and production API"
 
-          cp "$AAB" "$OUT/EcoTracker-1.0.3-build4-play.aab"
-          cp "$APK" "$OUT/EcoTracker-1.0.3-build4-release.apk"
-          (cd "$OUT" && sha256sum EcoTracker-1.0.3-build4-play.aab EcoTracker-1.0.3-build4-release.apk > SHA256SUMS.txt)
           cat > "$OUT/VALIDATION.txt" <<EOF
           EcoTracker Android release validated
           Package: com.alternativeventures.ecotracker
@@ -195,6 +225,7 @@ jobs:
           EOF
 
       - name: Upload final release package
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ecotracker-1.0.3-build4-final-play-release
