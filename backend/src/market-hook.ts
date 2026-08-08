@@ -10,6 +10,8 @@ import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
 import { registerMarketRoutes } from "./market-routes.js";
 import { registerPrivacyRoutes } from "./privacy-routes.js";
+import { registerSourcingRoutes } from "./sourcing-routes.js";
+import { rankSourcingInventory } from "./sourcing-engine.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
 const proto = express.application as unknown as {
@@ -36,10 +38,12 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
-    // Carbonmark é registrado antes das rotas genéricas: sincroniza o catálogo e,
-    // para listings Carbonmark, trava o custo real da fonte antes da cobrança.
+    // Carbonmark é registrado primeiro: sincroniza o catálogo e trava o custo real da fonte.
     registerCarbonmarkRoutes(app);
-    // A trava de elegibilidade continua protegendo todas as demais fontes.
+    // O sourcing entra depois do refresh Carbonmark e antes das rotas de elegibilidade.
+    // Ele ordena o catálogo por executabilidade, integridade, fracionamento e disponibilidade.
+    registerSourcingRoutes(app);
+    // A trava de elegibilidade continua protegendo todas as fontes e todas as cotações.
     registerEligibilityRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
@@ -52,6 +56,7 @@ if (!proto.__marketInstalled) {
       .then(async () => {
         // Não impede o boot se a Carbonmark estiver temporariamente indisponível.
         await refreshCarbonmarkIfStale(0).catch((error) => console.warn("[carbonmark] initial refresh failed", error));
+        await rankSourcingInventory().catch((error) => console.warn("[sourcing] initial ranking failed", error));
         startCommerceWorker();
         return original.apply(this, args);
       })
