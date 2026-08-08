@@ -1,5 +1,6 @@
 import type { Application, NextFunction, Request, Response } from "express";
 import { z } from "zod";
+import { requireAdmin } from "./auth.js";
 import { carbonmarkStatus, createCarbonmarkQuote, refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
@@ -56,7 +57,7 @@ export function registerCarbonmarkRoutes(app: Application) {
     }
   });
 
-  app.post("/api/market/carbonmark/refresh", async (_req: Request, res: Response) => {
+  app.post("/api/admin/market/carbonmark/refresh", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const result = await refreshCarbonmarkAssets();
       res.setHeader("Cache-Control", "no-store");
@@ -101,7 +102,7 @@ export function registerCarbonmarkRoutes(app: Application) {
       if (!Number.isFinite(fx) || fx <= 0) throw new Error("Câmbio BRL/USD indisponível");
 
       // Carbonmark devolve cost_usdc para a quantidade inteira solicitada. Esse é
-      // o custo executável que entra no ledger, já em vez de estimar pelo card.
+      // o custo executável que entra no ledger, em vez de estimar pelo card.
       const sourceCostBrl = sourceQuote.costUsdc * fx;
       const priced = priceFromSourceCost({
         sourceCostBrl,
