@@ -2,20 +2,22 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
-import { getAssets, refreshAssets } from "../../api";
+import { getEligibilityCatalog } from "../../api";
 import { AssetCard } from "../../components/AssetCard";
 import { Chip, EmptyState, Eyebrow, LoadingBlock, Screen, SectionHeader } from "../../components/ui";
 import { colors, radius, spacing, typography } from "../../theme";
-import type { Asset } from "../../types";
+import type { Asset, EligibilityCatalog } from "../../types";
 
-type Filter = "all" | "live" | "removal" | "quote";
+type Shelf = "verified" | "contribution" | "restricted";
+
+const EMPTY: EligibilityCatalog = { verifiedCompensation: [], climateContribution: [], restricted: [] };
 
 export default function MarketScreen() {
   const router = useRouter();
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [catalog, setCatalog] = useState<EligibilityCatalog>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [shelf, setShelf] = useState<Shelf>("verified");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
@@ -23,8 +25,8 @@ export default function MarketScreen() {
     force ? setRefreshing(true) : setLoading(true);
     setError("");
     try {
-      const data = force ? await refreshAssets() : await getAssets();
-      setAssets(Array.isArray(data) ? data : []);
+      const data = await getEligibilityCatalog();
+      setCatalog(data || EMPTY);
     } catch (nextError) {
       setError((nextError as Error).message);
     } finally {
@@ -35,29 +37,29 @@ export default function MarketScreen() {
 
   useEffect(() => { void load(); }, []);
 
-  const filtered = useMemo(() => assets.filter((asset) => {
-    const haystack = `${asset.registry} ${asset.project_name} ${asset.description || ""}`.toLowerCase();
-    const matchesSearch = !search.trim() || haystack.includes(search.trim().toLowerCase());
-    const matchesFilter = filter === "all"
-      || (filter === "live" && asset.source_status === "connected")
-      || (filter === "removal" && asset.asset_type.includes("removal"))
-      || (filter === "quote" && asset.pricing_mode === "quote");
-    return matchesSearch && matchesFilter;
-  }), [assets, filter, search]);
+  const current = shelf === "verified"
+    ? catalog.verifiedCompensation
+    : shelf === "contribution" ? catalog.climateContribution : catalog.restricted;
 
-  const liveCount = assets.filter((asset) => asset.source_status === "connected").length;
+  const filtered = useMemo(() => current.filter((asset) => {
+    const haystack = `${asset.registry} ${asset.project_name} ${asset.description || ""} ${asset.vintage || ""}`.toLowerCase();
+    return !search.trim() || haystack.includes(search.trim().toLowerCase());
+  }), [current, search]);
+
+  const verifiedCount = catalog.verifiedCompensation.length;
+  const fractionalCount = catalog.verifiedCompensation.filter((asset) => asset.fractional_retirement_supported).length;
 
   return (
     <Screen refreshing={refreshing} onRefresh={() => void load(true)} contentStyle={{ paddingTop: spacing.md }}>
-      <Eyebrow>ECOROUTER MARKETPLACE</Eyebrow>
-      <Text style={styles.title}>Escolha a origem do seu impacto.</Text>
-      <Text style={styles.subtitle}>Compare fontes monitoradas, preços indicativos e condições de aposentadoria antes de solicitar sua cotação.</Text>
+      <Eyebrow>MERCADO ECOTRACKER</Eyebrow>
+      <Text style={styles.title}>Compense com lastro verificável.</Text>
+      <Text style={styles.subtitle}>A prateleira principal mostra apenas lotes aprovados para compensação voluntária. Ativos de contribuição climática ficam separados e nunca são apresentados como offset.</Text>
 
-      <View style={styles.liveCard}>
-        <View style={styles.liveIcon}><MaterialCommunityIcons name="access-point" size={24} color={colors.primary} /></View>
+      <View style={styles.integrityCard}>
+        <View style={styles.integrityIcon}><MaterialCommunityIcons name="shield-check" size={26} color={colors.primary} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.liveTitle}>{liveCount} fonte{liveCount === 1 ? "" : "s"} conectada{liveCount === 1 ? "" : "s"}</Text>
-          <Text style={styles.liveCopy}>Puxe a tela para baixo para atualizar ordens, volume e câmbio.</Text>
+          <Text style={styles.integrityTitle}>{verifiedCount} lote{verifiedCount === 1 ? "" : "s"} de compensação verificada</Text>
+          <Text style={styles.integrityCopy}>{fractionalCount > 0 ? `${fractionalCount} com aposentadoria fracionária habilitada.` : "Nenhuma fonte fracionária habilitada neste momento; compras em kg ficam bloqueadas até existir uma fonte compatível."}</Text>
         </View>
       </View>
 
@@ -66,7 +68,7 @@ export default function MarketScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Buscar registry ou projeto"
+          placeholder="Buscar registry, projeto ou vintage"
           placeholderTextColor={colors.textDim}
           selectionColor={colors.primary}
           style={styles.search}
@@ -74,26 +76,43 @@ export default function MarketScreen() {
       </View>
 
       <View style={styles.filters}>
-        <Chip label="Todos" active={filter === "all"} onPress={() => setFilter("all")} />
-        <Chip label="Ao vivo" active={filter === "live"} onPress={() => setFilter("live")} />
-        <Chip label="Remoção" active={filter === "removal"} onPress={() => setFilter("removal")} />
-        <Chip label="Sob consulta" active={filter === "quote"} onPress={() => setFilter("quote")} />
+        <Chip label={`Compensação (${catalog.verifiedCompensation.length})`} active={shelf === "verified"} onPress={() => setShelf("verified")} />
+        <Chip label={`Contribuição (${catalog.climateContribution.length})`} active={shelf === "contribution"} onPress={() => setShelf("contribution")} />
+        <Chip label={`Restritos (${catalog.restricted.length})`} active={shelf === "restricted"} onPress={() => setShelf("restricted")} />
       </View>
 
-      <SectionHeader title={`${filtered.length} opções encontradas`} subtitle="Nenhum pagamento ocorre antes da confirmação executável da fonte." />
+      <SectionHeader
+        title={shelf === "verified" ? "Compensação Verificada" : shelf === "contribution" ? "Contribuição Climática" : "Uso Restrito / Histórico"}
+        subtitle={shelf === "verified"
+          ? "Lotes com status registral, evidência, aposentadoria e validade comercial revisados."
+          : shelf === "contribution"
+            ? "Apoie impacto climático/ecológico sem afirmar compensação de emissões."
+            : "Itens visíveis para transparência e histórico. Não são compráveis como compensação."}
+      />
 
-      {loading ? <LoadingBlock label="Lendo o mercado ambiental..." /> : null}
+      {loading ? <LoadingBlock label="Validando elegibilidade dos lotes..." /> : null}
       {error ? <EmptyState icon="cloud-alert-outline" title="Não foi possível atualizar" message={error} /> : null}
-      {!loading && !error && filtered.length === 0 ? <EmptyState icon="leaf-off" title="Nenhum ativo neste filtro" message="Tente outro termo ou atualize o mercado." /> : null}
+      {!loading && !error && filtered.length === 0 ? (
+        <EmptyState
+          icon={shelf === "verified" ? "shield-alert-outline" : "leaf-off"}
+          title={shelf === "verified" ? "Nenhum lote verificado disponível" : "Nenhum ativo nesta prateleira"}
+          message={shelf === "verified" ? "O EcoTracker não substitui qualidade por disponibilidade. Uma nova fonte precisa ser validada antes de voltar à venda." : "Atualize o catálogo ou consulte outra prateleira."}
+        />
+      ) : null}
 
       <View style={styles.list}>
         {filtered.map((asset) => (
           <AssetCard
             key={asset.id}
             asset={asset}
-            onPress={() => router.push({ pathname: "/asset/[id]", params: { id: String(asset.id) } })}
+            onPress={() => router.push({ pathname: "/asset/[id]", params: { id: String(asset.id), shelf } })}
           />
         ))}
+      </View>
+
+      <View style={styles.policyCard}>
+        <MaterialCommunityIcons name="information-outline" size={22} color={colors.blue} />
+        <Text style={styles.policyCopy}><Text style={styles.policyStrong}>Vintage não é “vencimento”. </Text>A data de validade exibida é a política comercial do EcoTracker. Um lote pode existir no registry e ainda assim ficar fora da prateleira de compensação por qualidade, claim, granularidade ou revisão desatualizada.</Text>
       </View>
     </Screen>
   );
@@ -102,12 +121,15 @@ export default function MarketScreen() {
 const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: typography.title, fontWeight: "900", letterSpacing: -1.1, lineHeight: 34, marginTop: spacing.sm },
   subtitle: { color: colors.textMuted, fontSize: 14, lineHeight: 22, marginTop: spacing.sm },
-  liveCard: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.xxl, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceStrong },
-  liveIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryMuted },
-  liveTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
-  liveCopy: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  integrityCard: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.xxl, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceStrong },
+  integrityIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryMuted },
+  integrityTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  integrityCopy: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 4 },
   searchWrap: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 54, marginTop: spacing.xxl, paddingHorizontal: spacing.lg, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   search: { flex: 1, color: colors.text, fontSize: 14 },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   list: { gap: spacing.md },
+  policyCard: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xl, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  policyCopy: { flex: 1, color: colors.textMuted, fontSize: 11, lineHeight: 18 },
+  policyStrong: { color: colors.text, fontWeight: "900" },
 });
