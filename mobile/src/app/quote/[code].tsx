@@ -81,6 +81,7 @@ export default function QuoteDetailScreen() {
   const paymentUrl = checkout?.checkoutUrl || quote.payment_url;
   const canPay = ["quoted", "awaiting_payment"].includes(quote.status) && quote.payment_status !== "paid" && Boolean(quote.final_total);
   const paid = quote.payment_status === "paid";
+  const carbonmarkProof = Boolean(quote.retirement_url || quote.retirement_certificate_url || quote.carbonmark_retirement_id);
 
   return (
     <Screen refreshing={refreshing} onRefresh={() => void load()}>
@@ -161,6 +162,19 @@ export default function QuoteDetailScreen() {
         </View>
       ) : null}
 
+      {carbonmarkProof ? (
+        <View style={styles.proofCard}>
+          <View style={styles.proofHeader}>
+            <View style={styles.proofIcon}><MaterialCommunityIcons name="certificate-outline" size={25} color={colors.primary} /></View>
+            <View style={{ flex: 1 }}><Text style={styles.blockTitle}>Prova Carbonmark</Text><Text style={styles.blockCopy}>A aposentadoria concluída possui registro público e evidências independentes da operação EcoTracker.</Text></View>
+          </View>
+          {quote.retirement_url ? <PrimaryButton title="Ver aposentadoria pública" icon="open-in-new" secondary onPress={() => void WebBrowser.openBrowserAsync(quote.retirement_url!)} /> : null}
+          {quote.retirement_certificate_url ? <PrimaryButton title="Abrir certificado Carbonmark" icon="certificate-outline" secondary onPress={() => void WebBrowser.openBrowserAsync(quote.retirement_certificate_url!)} /> : null}
+          {quote.retirement_provenance_url ? <PrimaryButton title="Ver provenance do crédito" icon="source-branch" secondary onPress={() => void WebBrowser.openBrowserAsync(quote.retirement_provenance_url!)} /> : null}
+          {quote.carbonmark_retirement_id ? <Text style={styles.retirementId}>ID: {quote.carbonmark_retirement_id}</Text> : null}
+        </View>
+      ) : null}
+
       {quote.receipt_status === "issued" ? (
         <View style={{ marginTop: spacing.md }}>
           <PrimaryButton title="Abrir recibo e comprovante" icon="file-document-check-outline" secondary onPress={() => void WebBrowser.openBrowserAsync(receiptUrl(quote.public_code))} />
@@ -219,6 +233,10 @@ const styles = StyleSheet.create({
   referenceCard: { marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   referenceLabel: { color: colors.textDim, fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
   referenceValue: { color: colors.text, fontSize: 12, lineHeight: 18, marginTop: 7 },
+  proofCard: { gap: spacing.sm, marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.primaryMuted, borderWidth: 1, borderColor: colors.borderStrong },
+  proofHeader: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginBottom: spacing.sm },
+  proofIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: colors.backgroundRaised },
+  retirementId: { color: colors.textDim, fontSize: 9, lineHeight: 14, marginTop: spacing.sm },
   securityNote: { flexDirection: "row", gap: spacing.sm, alignItems: "center", justifyContent: "center", padding: spacing.xl, marginTop: spacing.lg },
   securityText: { flex: 1, color: colors.textDim, fontSize: 10, lineHeight: 15, textAlign: "center" },
 });
