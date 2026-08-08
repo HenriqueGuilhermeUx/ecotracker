@@ -1,4 +1,4 @@
-import type { Asset, Checkout, Quote, QuoteRequest } from "./types";
+import type { Asset, Checkout, EligibilityCatalog, Quote, QuoteRequest } from "./types";
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || "https://ecotracker-api-cik7.onrender.com/api").replace(/\/$/, "");
 
@@ -32,6 +32,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getAssets = () => request<Asset[]>("/market/assets");
 export const refreshAssets = () => request<Asset[]>("/market/refresh");
+export const getEligibilityCatalog = () => request<EligibilityCatalog>("/market/catalog/eligibility");
+export const getCompensationAssets = (kg = 1000) => request<Asset[]>(`/market/compensation-assets?kg=${encodeURIComponent(String(kg))}`);
 export const getQuote = (code: string) => request<Quote>(`/market/quotes/${encodeURIComponent(code)}`);
 
 export const createQuote = (payload: QuoteRequest) =>
