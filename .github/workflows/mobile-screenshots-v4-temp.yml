@@ -45,43 +45,25 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
-            set -eu
             mkdir -p play-screenshots
             adb install -r "$ECOT_SCREENSHOT_APK"
             adb shell am force-stop com.alternativeventures.ecotracker || true
             adb shell am start -n com.alternativeventures.ecotracker/.MainActivity
             sleep 20
-
-            # O profile Pixel 2 deste runner inicia em 1080x1920. O comando
-            # `adb shell wm size` fica vazio intermitentemente neste macOS,
-            # mesmo com o app já instalado e aberto, então não dependemos dele.
-            W=1080
-            H=1920
-            printf 'Expected Pixel 2 size: %sx%s\n' "$W" "$H" | tee play-screenshots/device-size.txt
+            echo 'Pixel 2 emulator: 1080x1920' > play-screenshots/device-size.txt
             adb shell wm size >> play-screenshots/device-size.txt 2>&1 || true
-
-            X2=324
-            X3=540
-            X4=756
-            X5=972
-            Y=1810
-
-            capture() {
-              NAME="$1"
-              sleep 5
-              adb shell screencap -p "/sdcard/${NAME}.png"
-              adb pull "/sdcard/${NAME}.png" "play-screenshots/${NAME}.png" >/dev/null
-            }
-
-            capture 01-inicio
-            adb shell input tap "$X2" "$Y"; capture 02-mercado
-            adb shell input tap "$X3" "$Y"; capture 03-calcular
-            adb shell input tap "$X4" "$Y"; capture 04-atividade
-            adb shell input tap "$X5" "$Y"; capture 05-conta
-
+            sleep 5 && adb shell screencap -p /sdcard/01-inicio.png && adb pull /sdcard/01-inicio.png play-screenshots/01-inicio.png >/dev/null
+            adb shell input tap 324 1810
+            sleep 5 && adb shell screencap -p /sdcard/02-mercado.png && adb pull /sdcard/02-mercado.png play-screenshots/02-mercado.png >/dev/null
+            adb shell input tap 540 1810
+            sleep 5 && adb shell screencap -p /sdcard/03-calcular.png && adb pull /sdcard/03-calcular.png play-screenshots/03-calcular.png >/dev/null
+            adb shell input tap 756 1810
+            sleep 5 && adb shell screencap -p /sdcard/04-atividade.png && adb pull /sdcard/04-atividade.png play-screenshots/04-atividade.png >/dev/null
+            adb shell input tap 972 1810
+            sleep 5 && adb shell screencap -p /sdcard/05-conta.png && adb pull /sdcard/05-conta.png play-screenshots/05-conta.png >/dev/null
             adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
             adb pull /sdcard/window.xml play-screenshots/window.xml >/dev/null 2>&1 || true
-            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' > play-screenshots/focus.txt || true
+            adb shell dumpsys window windows > play-screenshots/window-dumpsys.txt 2>&1 || true
 
       - name: Validate screenshot dimensions and create alt text
         shell: bash
