@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   capture-phone-screenshots:
-    runs-on: macos-14
+    runs-on: macos-15-intel
     timeout-minutes: 30
 
     steps:
@@ -40,7 +40,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          arch: arm64-v8a
+          arch: x86_64
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
