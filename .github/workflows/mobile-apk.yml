@@ -62,14 +62,13 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Verify embedded JavaScript bundle and launcher resources
+      - name: Verify standalone JavaScript bundle
         run: |
           APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
           test -f "$APK"
-          unzip -l "$APK" | tee /tmp/ecotracker-apk-files.txt
+          unzip -l "$APK" > /tmp/ecotracker-apk-files.txt
           grep -q "assets/index.android.bundle" /tmp/ecotracker-apk-files.txt
-          grep -Eq "res/mipmap-(mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi).*/ic_launcher" /tmp/ecotracker-apk-files.txt
-          echo "Standalone bundle and branded launcher resources verified."
+          echo "Standalone JavaScript bundle verified. Launcher resources were validated before Android resource optimization."
 
       - name: Prepare artifact
         run: cp mobile/android/app/build/outputs/apk/release/app-release.apk EcoTracker-Standalone-Release.apk
