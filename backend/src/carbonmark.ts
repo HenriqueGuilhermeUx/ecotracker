@@ -69,10 +69,19 @@ async function request(path: string, init: RequestInit = {}, timeoutMs = 15000):
     } catch (error) {
       lastError = error;
       const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 0;
-      if (status === 401 || status === 403 || status === 400) break;
+      if (status === 401 || status === 403) break;
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Carbonmark indisponível");
+}
+
+async function requestListEndpoint(pathWithPagination: string, barePath: string) {
+  try { return await request(pathWithPagination); }
+  catch (error) {
+    const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 0;
+    if (status !== 400 && status !== 404 && status !== 422) throw error;
+    return request(barePath);
+  }
 }
 
 function listFrom(data: unknown, preferredKeys: string[] = []): Json[] {
@@ -106,6 +115,13 @@ function stringAt(...values: unknown[]): string | null {
   return null;
 }
 
+function booleanAt(...values: unknown[]): boolean {
+  for (const value of values) {
+    if (value === true || value === "true" || value === 1 || value === "1") return true;
+  }
+  return false;
+}
+
 function yearFrom(value: unknown): number | null {
   const direct = Number(value);
   if (Number.isInteger(direct) && direct >= 1990 && direct <= 2100) return direct;
@@ -114,19 +130,28 @@ function yearFrom(value: unknown): number | null {
 }
 
 function registryName(raw: string | null, projectKey: string) {
-  const value = String(raw || "").trim();
-  if (value) return value;
-  const prefix = projectKey.split("-")[0]?.toUpperCase();
+  const source = String(raw || projectKey.split("-")[0] || "").trim();
+  const normalized = source.toUpperCase();
   const names: Record<string, string> = {
     VCS: "Verra VCS",
+    VERRA: "Verra VCS",
     GS: "Gold Standard",
+    GOLDSTANDARD: "Gold Standard",
     ACR: "American Carbon Registry",
     CAR: "Climate Action Reserve",
     PURO: "Puro.earth",
     UCR: "Universal Carbon Registry",
     CFC: "City Forest Credits",
   };
-  return names[prefix] || prefix || "Carbonmark";
+  return names[normalized.replace(/[^A-Z]/g, "")] || source || "Carbonmark";
+}
+
+function registryAutomaticallyEligible(registry: string) {
+  const normalized = registry.toLowerCase();
+  return normalized.includes("verra")
+    || normalized.includes("gold standard")
+    || normalized.includes("american carbon registry")
+    || normalized.includes("climate action reserve");
 }
 
 function descriptionFor(project: Json, registry: string, vintage: number | null) {
@@ -161,8 +186,8 @@ function projectIndex(projects: Json[]) {
 
 async function readCarbonmarkMarket() {
   const [projectsResult, pricesResult] = await Promise.all([
-    request("/carbonProjects?limit=250"),
-    request("/prices?limit=500"),
+    requestListEndpoint("/carbonProjects?limit=250", "/carbonProjects"),
+    requestListEndpoint("/prices?limit=500", "/prices"),
   ]);
   const projects = listFrom(projectsResult.data, ["carbonProjects"]);
   const prices = listFrom(pricesResult.data, ["prices"]);
@@ -185,6 +210,7 @@ export async function refreshCarbonmarkAssets() {
   const normalized = prices.map((price) => {
     const type = String(price.type || "listing").toLowerCase();
     const listing = objectAt(price.listing);
+    const token = objectAt(listing.token);
     const creditId = objectAt(listing.creditId || listing.credit_id || price.creditId || price.credit_id);
     const sourceId = stringAt(price.sourceId, price.asset_price_source_id, price.assetPriceSourceId);
     const projectKey = stringAt(creditId.projectId, creditId.project_id, listing.projectId, price.projectId);
@@ -198,22 +224,27 @@ export async function refreshCarbonmarkAssets() {
     const registry = registryName(stringAt(project.registry), projectKey);
     const lowerRegistry = registry.toLowerCase();
     const requiresConsumptionMetadata = lowerRegistry.includes("puro");
+    const isExAnte = booleanAt(token.isExAnte, token.is_ex_ante, listing.isExAnte, listing.is_ex_ante);
     const vintageEligible = vintage != null && vintage >= minVintage && vintage <= currentYear;
-    const eligible = vintageEligible && !requiresConsumptionMetadata;
+    const registryEligible = registryAutomaticallyEligible(registry);
+    const eligible = vintageEligible && registryEligible && !isExAnte && !requiresConsumptionMetadata;
     const commercialValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const projectName = stringAt(project.name, project.projectName) || `Carbonmark ${projectKey}`;
     const country = stringAt(project.country, project.location);
-    const evidenceUrl = `${baseUrl}/carbonProjects/${encodeURIComponent(projectKey)}`;
+    const evidenceUrl = stringAt(project.url, project.project_url, project.projectUrl)
+      || `${baseUrl}/carbonProjects/${encodeURIComponent(projectKey)}`;
     const minOrderKg = Math.max(1, Math.ceil(minFillTonnes * 1000));
     return {
       sourceId, projectKey, purchasePrice, supply, minFillTonnes, minOrderKg,
       projectName, country, vintage, registry, evidenceUrl,
       methodology: methodologyFor(project),
       description: descriptionFor(project, registry, vintage),
-      eligible, requiresConsumptionMetadata, commercialValidUntil,
+      eligible, requiresConsumptionMetadata, isExAnte, registryEligible, commercialValidUntil,
       riskFlags: [
         ...(vintage == null ? ["vintage-not-resolved"] : []),
         ...(!vintageEligible && vintage != null ? ["vintage-outside-ecotracker-policy"] : []),
+        ...(!registryEligible ? ["registry-requires-manual-eligibility-review"] : []),
+        ...(isExAnte ? ["ex-ante-credit-not-allowed-for-automatic-offset"] : []),
         ...(requiresConsumptionMetadata ? ["puro-consumption-metadata-required"] : []),
       ],
     };
@@ -238,6 +269,8 @@ export async function refreshCarbonmarkAssets() {
       purchasePriceUsdTon: item.purchasePrice,
       minFillTonnes: item.minFillTonnes,
       fractionalRetirement: item.minOrderKg <= 1,
+      registryEligible: item.registryEligible,
+      isExAnte: item.isExAnte,
       checkedAt: new Date().toISOString(),
       note: item.eligible
         ? "Listing Carbonmark com preço visível, aposentadoria programática e elegibilidade EcoTracker vigente."
@@ -274,7 +307,7 @@ export async function refreshCarbonmarkAssets() {
         JSON.stringify(monitorDetails), item.eligible ? "voluntary_offset" : "climate_contribution",
         item.eligible ? "eligible" : "restricted",
         item.eligible
-          ? "Listing Carbonmark com preço executável, aposentadoria programática, status tradable e vintage dentro da política comercial EcoTracker. Uso: compensação voluntária, não compliance."
+          ? "Listing Carbonmark de registry aceito, não ex-ante, com preço executável, aposentadoria programática, status tradable e vintage dentro da política comercial EcoTracker. Uso: compensação voluntária, não compliance."
           : "Listing Carbonmark fora da prateleira de compensação automática até resolver as flags registradas.",
         vintageStart, vintageEnd, item.commercialValidUntil, item.projectKey, item.sourceId, item.evidenceUrl,
         item.minOrderKg <= 1, item.minOrderKg, JSON.stringify(item.riskFlags),
@@ -284,10 +317,10 @@ export async function refreshCarbonmarkAssets() {
 
   await pool.query(`
     UPDATE offset_source_channels SET
-      status=$2,last_checked_at=NOW(),updated_at=NOW(),
-      notes=$3
+      status=$1,last_checked_at=NOW(),updated_at=NOW(),
+      notes=$2
     WHERE provider_key='carbonmark'`,
-    ["carbonmark", environment() === "production" ? "production_connected" : "sandbox_connected",
+    [environment() === "production" ? "production_connected" : "sandbox_connected",
       `${normalized.length} listings Carbonmark publicados. API ${baseUrl}. Ambiente ${environment()}.`],
   );
 

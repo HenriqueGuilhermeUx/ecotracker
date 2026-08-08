@@ -1,0 +1,56 @@
+name: EcoTracker Android AAB Staging
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --silent
+      - name: Generate native Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo prebuild --platform android --clean
+      - name: Install definitive launcher icons
+        working-directory: mobile
+        run: node install-android-icons.cjs
+      - name: Build release app bundle
+        working-directory: mobile/android
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+      - name: Verify AAB
+        run: |
+          AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB"
+          unzip -l "$AAB" | grep -q "base/assets/index.android.bundle"
+          cp "$AAB" EcoTracker-Staging.aab
+      - name: Upload AAB staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-aab-staging
+          path: EcoTracker-Staging.aab
+          if-no-files-found: error
+          retention-days: 7

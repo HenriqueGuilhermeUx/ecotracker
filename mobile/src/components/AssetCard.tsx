@@ -53,8 +53,8 @@ export function AssetCard({ asset, onPress, compact = false }: { asset: Asset; o
 
       <View style={styles.metrics}>
         <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Preço de referência</Text>
-          <Text style={styles.metricValue}>{price ? price : "Sob consulta"}</Text>
+          <Text style={styles.metricLabel}>{isCarbonmark ? "Preço final" : "Preço de referência"}</Text>
+          <Text style={styles.metricValue}>{isCarbonmark ? "Cotação ao vivo" : price ? price : "Sob consulta"}</Text>
         </View>
         <View style={styles.metric}>
           <Text style={styles.metricLabel}>Disponibilidade</Text>
@@ -63,7 +63,7 @@ export function AssetCard({ asset, onPress, compact = false }: { asset: Asset; o
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.unit}><Text style={styles.unitText}>{verifiedOffset ? "Preço final travado na cotação" : "1 ECOT = 1 kg CO₂e alocado"}</Text></View>
+        <View style={styles.unit}><Text style={styles.unitText}>{verifiedOffset ? "Preço travado antes de pagar" : "1 ECOT = 1 kg CO₂e alocado"}</Text></View>
         <MaterialCommunityIcons name="arrow-right" size={20} color={colors.primary} />
       </View>
     </ScalePressable>
