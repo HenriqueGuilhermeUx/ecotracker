@@ -25,7 +25,13 @@ export async function initEligibilityDb(): Promise<void> {
       ADD COLUMN IF NOT EXISTS vintage_policy_override BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS vintage_exception_reason TEXT,
       ADD COLUMN IF NOT EXISTS eligibility_checked_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS eligibility_risk_flags JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ADD COLUMN IF NOT EXISTS eligibility_risk_flags JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS sourcing_score NUMERIC(6,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS sourcing_tier VARCHAR(8) NOT NULL DEFAULT 'D',
+      ADD COLUMN IF NOT EXISTS sourcing_shelf VARCHAR(40) NOT NULL DEFAULT 'restricted',
+      ADD COLUMN IF NOT EXISTS sourcing_rank INTEGER,
+      ADD COLUMN IF NOT EXISTS sourcing_executable BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sourcing_checked_at TIMESTAMPTZ;
 
     ALTER TABLE quote_requests
       ADD COLUMN IF NOT EXISTS claim_category VARCHAR(40),
@@ -54,7 +60,10 @@ export async function initEligibilityDb(): Promise<void> {
     VALUES
       ('carbonmark','Carbonmark API','api_retirement',1,TRUE,TRUE,TRUE,'awaiting_production_key','Listings compatíveis com a API Carbonmark','https://www.carbonmark.com/api-and-integrations','API com cotação e aposentadoria programática; produção depende de onboarding e chave própria.'),
       ('gold-standard','Gold Standard Marketplace','direct_marketplace',1000,FALSE,TRUE,TRUE,'manual_available','Gold Standard Impact Registry','https://marketplace.goldstandard.org/','Canal direto para créditos certificados e aposentadoria; automação comercial depende de integração/parceria.'),
-      ('verra-partner','Verra / parceiro de registry','registry_partner',1000,FALSE,TRUE,TRUE,'partner_required','Verified Carbon Standard (VCS)','https://verra.org/programs/verified-carbon-standard/','VCUs devem permanecer no registry e ser aposentados conforme os termos da Verra. Tokenização/related instruments exigem cuidado e eventual consentimento.')
+      ('verra-partner','Verra / parceiro de registry','registry_partner',1000,FALSE,TRUE,TRUE,'partner_required','Verified Carbon Standard (VCS)','https://verra.org/programs/verified-carbon-standard/','VCUs devem permanecer no registry e ser aposentados conforme os termos da Verra. Tokenização/related instruments exigem cuidado e eventual consentimento.'),
+      ('acr-partner','American Carbon Registry / parceiro','registry_partner',1000,FALSE,TRUE,TRUE,'partner_required','American Carbon Registry','https://acrcarbon.org/','Canal adicional para sourcing de créditos ACR; disponibilidade e automação dependem de parceiro ou integração comercial.'),
+      ('car-partner','Climate Action Reserve / parceiro','registry_partner',1000,FALSE,TRUE,TRUE,'partner_required','Climate Action Reserve','https://climateactionreserve.org/','Canal adicional para sourcing de CRTs; aposentadoria e disponibilidade precisam ser confirmadas antes da oferta.'),
+      ('puro-partner','Puro.earth / parceiro','registry_partner',1000,FALSE,TRUE,TRUE,'partner_required','Puro Standard','https://puro.earth/','Canal de remoção durável. Créditos Puro exigem tratamento de metadados e elegibilidade específicos antes de entrar em compensação automática.')
     ON CONFLICT (provider_key) DO UPDATE SET
       provider_name=EXCLUDED.provider_name,
       sourcing_mode=EXCLUDED.sourcing_mode,
@@ -71,6 +80,8 @@ export async function initEligibilityDb(): Promise<void> {
       ON monitored_assets(active,claim_category,eligibility_status,commercial_valid_until);
     CREATE INDEX IF NOT EXISTS monitored_assets_registry_status_idx
       ON monitored_assets(source_unit_status,eligibility_checked_at DESC);
+    CREATE INDEX IF NOT EXISTS monitored_assets_sourcing_idx
+      ON monitored_assets(active,sourcing_shelf,sourcing_executable,sourcing_score DESC);
 
     UPDATE monitored_assets
       SET claim_category='climate_contribution',
@@ -114,6 +125,11 @@ export async function initEligibilityDb(): Promise<void> {
           'ccpStatus', a.ccp_status,
           'corsiaStatus', a.corsia_status,
           'article6Status', a.article6_status,
+          'sourcingScore', a.sourcing_score,
+          'sourcingTier', a.sourcing_tier,
+          'sourcingShelf', a.sourcing_shelf,
+          'sourcingRank', a.sourcing_rank,
+          'sourcingExecutable', a.sourcing_executable,
           'checkedAt', a.eligibility_checked_at,
           'riskFlags', a.eligibility_risk_flags
         );
