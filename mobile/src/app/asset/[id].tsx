@@ -32,6 +32,8 @@ export default function AssetDetailScreen() {
   }, [id, recommendationKg]);
 
   const estimate = useMemo(() => {
+    const carbonmark = asset?.monitor_details?.providerKey === "carbonmark" || Boolean(asset?.source_reference?.startsWith("carbonmark-"));
+    if (carbonmark) return null;
     const price = Number(asset?.indicative_price_brl_kg);
     return Number.isFinite(price) && price > 0 ? price * quantity : null;
   }, [asset, quantity]);
@@ -43,6 +45,7 @@ export default function AssetDetailScreen() {
   const contribution = asset.claim_category === "climate_contribution" || asset.claim_category === "ecological_contribution";
   const restricted = asset.eligibility_status === "restricted" || asset.eligibility_status === "ineligible" || asset.claim_category === "historical";
   const purpose = verifiedOffset ? "voluntary_offset" : "climate_contribution";
+  const isCarbonmark = asset.monitor_details?.providerKey === "carbonmark" || asset.source_reference.startsWith("carbonmark-");
   const fractionalOk = Boolean(asset.fractional_retirement_supported) || quantity % Math.max(1, Number(asset.retirement_granularity_kg || 1000)) === 0;
   const canRequest = !restricted && (contribution || (verifiedOffset && fractionalOk));
   const actionTitle = verifiedOffset ? "Cotar compensação" : contribution ? "Apoiar como contribuição" : "Indisponível para compra";
@@ -59,7 +62,7 @@ export default function AssetDetailScreen() {
         <Text style={styles.description}>{asset.description || "Ativo ambiental monitorado pelo EcoTracker."}</Text>
         <View style={styles.tags}>
           <Tag value={asset.asset_type.replaceAll("-", " ")} />
-          <Tag value={asset.quality_tier} />
+          <Tag value={isCarbonmark ? `Carbonmark ${asset.monitor_details?.environment || "API"}` : asset.quality_tier} />
           {asset.vintage ? <Tag value={`Vintage ${asset.vintage}`} /> : null}
           {asset.source_unit_status ? <Tag value={`Registry: ${asset.source_unit_status}`} /> : null}
           {asset.retirement_supported ? <Tag value="aposentadoria suportada" /> : null}
@@ -76,8 +79,8 @@ export default function AssetDetailScreen() {
       </View>
 
       <View style={styles.metrics}>
-        <Metric label="Preço por ECOT" value={asset.indicative_price_brl_kg ? money(Number(asset.indicative_price_brl_kg)) : "Sob consulta"} />
-        <Metric label="Preço por tonelada" value={asset.indicative_price_brl_ton ? money(Number(asset.indicative_price_brl_ton)) : "Confirmar"} />
+        <Metric label="Preço final" value={isCarbonmark ? "Cotação ao vivo" : asset.indicative_price_brl_kg ? money(Number(asset.indicative_price_brl_kg)) : "Sob consulta"} />
+        <Metric label={isCarbonmark ? "Fonte de preço" : "Preço por tonelada"} value={isCarbonmark ? "Carbonmark /quotes" : asset.indicative_price_brl_ton ? money(Number(asset.indicative_price_brl_ton)) : "Confirmar"} />
         <Metric label="Volume monitorado" value={asset.available_tons ? `${Number(asset.available_tons).toLocaleString("pt-BR", { maximumFractionDigits: 3 })} t` : "Confirmar"} />
         <Metric label="Pedido mínimo" value={`${Number(asset.min_order_kg || 1).toLocaleString("pt-BR")} ECOT`} />
         <Metric label="Validade comercial" value={date(asset.commercial_valid_until)} />
@@ -89,9 +92,10 @@ export default function AssetDetailScreen() {
         <Text style={styles.blockCopy}>{verifiedOffset ? "Escolha a quantidade em kg de CO₂e. A compra só avança se a fonte puder aposentar a quantidade solicitada de forma legítima." : "A contribuição é registrada separadamente e não será descrita como neutralização de emissões."}</Text>
         <QuantityStepper label="Quantidade de ECOT" helper="1 ECOT = 1 kg CO₂e alocado" value={quantity} min={asset.min_order_kg || 1} step={Math.max(1, asset.min_order_kg || 1)} onChange={setQuantity} />
         <View style={styles.estimate}>
-          <View><Text style={styles.estimateLabel}>ESTIMATIVA</Text><Text style={styles.estimateValue}>{estimate == null ? "Sob consulta" : money(estimate)}</Text></View>
+          <View><Text style={styles.estimateLabel}>{isCarbonmark ? "PREÇO" : "ESTIMATIVA"}</Text><Text style={styles.estimateValue}>{isCarbonmark ? "Calculado ao cotar" : estimate == null ? "Sob consulta" : money(estimate)}</Text></View>
           <View style={{ alignItems: "flex-end" }}><Text style={styles.estimateLabel}>QUANTIDADE</Text><Text style={styles.impactValue}>{quantity.toLocaleString("pt-BR")} kg</Text></View>
         </View>
+        {isCarbonmark ? <Text style={styles.livePriceNote}>O EcoTracker solicita uma cotação executável à Carbonmark, trava o custo da fonte por prazo limitado e só então mostra o total com a faixa de serviço aplicável.</Text> : null}
         {verifiedOffset && !fractionalOk ? <Text style={styles.warning}>Esta fonte aposenta em blocos de {Number(asset.retirement_granularity_kg || 1000).toLocaleString("pt-BR")} kg. Ajuste a quantidade ou escolha um lote com aposentadoria fracionária.</Text> : null}
         <PrimaryButton
           title={actionTitle}
@@ -107,12 +111,12 @@ export default function AssetDetailScreen() {
           <Text style={styles.blockTitle}>Transparência da fonte</Text>
           <Text style={styles.blockCopy}>{asset.monitor_details?.note || "O EcoTracker valida lote, preço, disponibilidade e regra de aposentadoria antes do pagamento."}</Text>
           {asset.registry_project_id ? <Text style={styles.evidence}>Projeto no registry: {asset.registry_project_id}</Text> : null}
-          {asset.registry_batch_id ? <Text style={styles.evidence}>Lote/serial: {asset.registry_batch_id}</Text> : null}
+          {asset.registry_batch_id ? <Text style={styles.evidence}>Listing/lote: {asset.registry_batch_id}</Text> : null}
         </View>
       </View>
 
-      {asset.registry_evidence_url ? <PrimaryButton title="Ver evidência no registry" icon="open-in-new" secondary onPress={() => void WebBrowser.openBrowserAsync(asset.registry_evidence_url!)} /> : null}
-      {asset.source_url ? <PrimaryButton title="Abrir fonte original" icon="open-in-new" secondary onPress={() => void WebBrowser.openBrowserAsync(asset.source_url!)} /> : null}
+      {asset.registry_evidence_url ? <PrimaryButton title="Ver evidência da origem" icon="open-in-new" secondary onPress={() => void WebBrowser.openBrowserAsync(asset.registry_evidence_url!)} /> : null}
+      {asset.source_url && asset.source_url !== asset.registry_evidence_url ? <PrimaryButton title="Abrir fonte original" icon="open-in-new" secondary onPress={() => void WebBrowser.openBrowserAsync(asset.source_url!)} /> : null}
     </Screen>
   );
 }
@@ -144,8 +148,9 @@ const styles = StyleSheet.create({
   blockCopy: { color: colors.textMuted, fontSize: 12, lineHeight: 19, marginTop: 5 },
   estimate: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", paddingVertical: spacing.xl },
   estimateLabel: { color: colors.textDim, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
-  estimateValue: { color: colors.primary, fontSize: 24, fontWeight: "900", marginTop: 5 },
+  estimateValue: { color: colors.primary, fontSize: 22, fontWeight: "900", marginTop: 5 },
   impactValue: { color: colors.text, fontSize: 17, fontWeight: "900", marginTop: 5 },
+  livePriceNote: { color: colors.textMuted, fontSize: 10, lineHeight: 16, marginBottom: spacing.md },
   warning: { color: "#f0b45d", fontSize: 11, lineHeight: 17, marginBottom: spacing.md },
   transparencyCard: { flexDirection: "row", gap: spacing.md, marginVertical: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   transparencyIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(123,167,255,.1)" },
