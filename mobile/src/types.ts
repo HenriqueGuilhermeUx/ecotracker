@@ -34,6 +34,14 @@ export type Asset = {
     batchDenom?: string;
     askDenom?: string;
     orderCount?: number;
+    providerKey?: string;
+    environment?: string;
+    apiBaseUrl?: string;
+    assetPriceSourceId?: string;
+    projectKey?: string;
+    purchasePriceUsdTon?: number;
+    minFillTonnes?: number;
+    fractionalRetirement?: boolean;
   } | null;
   last_checked_at?: string | null;
   active: boolean;
@@ -91,6 +99,11 @@ export type Quote = {
   sourcing_status?: string | null;
   retirement_status?: string | null;
   retirement_reference?: string | null;
+  retirement_tx_hash?: string | null;
+  retirement_url?: string | null;
+  retirement_certificate_url?: string | null;
+  retirement_provenance_url?: string | null;
+  carbonmark_retirement_id?: string | null;
   retired_at?: string | null;
   delivery_status?: string | null;
   delivery_reference?: string | null;
