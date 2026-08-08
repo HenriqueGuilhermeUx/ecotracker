@@ -1,10 +1,7 @@
 name: EcoTracker Android AAB Staging
 
 on:
-  pull_request:
-    paths:
-      - "mobile/**"
-      - ".github/workflows/mobile-aab-unsigned.yml"
+  workflow_dispatch:
 
 jobs:
   build-aab:
@@ -49,11 +46,11 @@ jobs:
           AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
           test -f "$AAB"
           unzip -l "$AAB" | grep -q "base/assets/index.android.bundle"
-          cp "$AAB" EcoTracker-1.0.3-build4-staging.aab
+          cp "$AAB" EcoTracker-Staging.aab
       - name: Upload AAB staging
         uses: actions/upload-artifact@v4
         with:
-          name: ecotracker-aab-build4-staging
-          path: EcoTracker-1.0.3-build4-staging.aab
+          name: ecotracker-aab-staging
+          path: EcoTracker-Staging.aab
           if-no-files-found: error
           retention-days: 7
