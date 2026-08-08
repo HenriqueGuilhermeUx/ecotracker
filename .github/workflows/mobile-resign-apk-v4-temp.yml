@@ -95,7 +95,7 @@ jobs:
 
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee release/APK-SIGNATURE.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" release/APK-SIGNATURE.txt
-          FP_RAW="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
+          FP_RAW="$(grep -m1 -E 'certificate SHA-256 digest:' release/APK-SIGNATURE.txt | sed 's/.*certificate SHA-256 digest: //')"
           FP="$(echo "$FP_RAW" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g;s/:$//')"
           EXPECTED="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
           test "$FP" = "$EXPECTED"
@@ -112,6 +112,7 @@ jobs:
           Label: EcoTracker
           Permanent upload certificate SHA-256: $EXPECTED
           APK Signature Scheme v2: verified
+          APK Signature Scheme v3: verified
           JavaScript bundle: embedded
           Production API endpoint: embedded
           Launcher icon: declared in manifest/badging
