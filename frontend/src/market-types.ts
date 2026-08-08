@@ -21,6 +21,14 @@ export type MonitorDetails = {
   expiration?: string | null;
 };
 
+export type EligibilityDecision = {
+  allowed: boolean;
+  purpose: string;
+  shelf: "verified_compensation" | "climate_contribution" | "restricted";
+  reason: string;
+  warnings: string[];
+};
+
 export type Asset = {
   id: number;
   public_code: string;
@@ -48,6 +56,34 @@ export type Asset = {
   active: boolean;
   indicative_price_brl_kg?: string | null;
   indicative_price_brl_ton?: string | null;
+  claim_category?: "voluntary_offset" | "climate_contribution" | "ecological_contribution" | "compliance" | "historical";
+  eligibility_status?: "eligible" | "restricted" | "ineligible" | "under_review";
+  eligibility_basis?: string | null;
+  source_unit_status?: "tradable" | "retired" | "cancelled" | "suspended" | "unknown";
+  vintage_start?: string | null;
+  vintage_end?: string | null;
+  issuance_date?: string | null;
+  commercial_valid_until?: string | null;
+  offer_expires_at?: string | null;
+  registry_project_id?: string | null;
+  registry_batch_id?: string | null;
+  registry_evidence_url?: string | null;
+  retirement_supported?: boolean;
+  fractional_retirement_supported?: boolean;
+  retirement_granularity_kg?: number;
+  beneficiary_retirement_supported?: boolean;
+  ccp_status?: string;
+  corsia_status?: string;
+  article6_status?: string;
+  eligibility_checked_at?: string | null;
+  eligibility_risk_flags?: string[];
+  eligibilityDecision?: EligibilityDecision;
+};
+
+export type EligibilityCatalog = {
+  verifiedCompensation: Asset[];
+  climateContribution: Asset[];
+  restricted: Asset[];
 };
 
 export type Quote = {
@@ -63,6 +99,8 @@ export type Quote = {
   delivery_mode: string;
   wallet_address?: string;
   purpose: string;
+  claim_category?: string | null;
+  eligibility_snapshot?: Record<string, unknown>;
   indicative_total?: string | null;
   final_total?: string | null;
   source_cost_brl?: string | null;
@@ -140,3 +178,6 @@ export const num = (value: number | string | null | undefined, digits = 2) =>
 
 export const dateTime = (value?: string | null) =>
   value ? new Date(value).toLocaleString("pt-BR") : "Ainda não atualizado";
+
+export const dateOnly = (value?: string | null) =>
+  value ? new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR") : "—";
