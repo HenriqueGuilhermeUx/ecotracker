@@ -43,9 +43,9 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p play-screenshots
             adb install -r "$ECOT_SCREENSHOT_APK"
             adb shell am force-stop com.alternativeventures.ecotracker || true
@@ -58,7 +58,6 @@ jobs:
             H="$(echo "$SIZE" | sed -n 's/.* \([0-9][0-9]*\)x\([0-9][0-9]*\).*/\2/p')"
             test -n "$W"
             test -n "$H"
-            X1=$((W*1/10))
             X2=$((W*3/10))
             X3=$((W*5/10))
             X4=$((W*7/10))
@@ -80,6 +79,7 @@ jobs:
 
             adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
             adb pull /sdcard/window.xml play-screenshots/window.xml >/dev/null 2>&1 || true
+            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' > play-screenshots/focus.txt || true
 
             for img in play-screenshots/*.png; do
               file "$img"
@@ -100,7 +100,10 @@ jobs:
                   raise SystemExit(f'Not PNG: {path}')
               return struct.unpack('>II', sig[16:24])
 
-          for p in sorted(Path('play-screenshots').glob('*.png')):
+          images = sorted(Path('play-screenshots').glob('*.png'))
+          if len(images) != 5:
+              raise SystemExit(f'Expected 5 screenshots, got {len(images)}')
+          for p in images:
               w,h=png_size(p)
               print(p.name,w,h)
               if min(w,h) < 320 or max(w,h) > 3840 or max(w,h) > 2*min(w,h):
