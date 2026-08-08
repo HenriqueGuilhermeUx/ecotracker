@@ -1,0 +1,203 @@
+name: EcoTracker Signed V4 Release Package
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-signed-v4-temp.yml"
+      - "mobile/**"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-signed-v4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --silent
+
+      - name: Recover permanent EcoTracker upload key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          KEY_DIR="$RUNNER_TEMP/ecotracker-upload-key"
+          mkdir -p "$KEY_DIR"
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8938980084/zip" \
+            -o "$RUNNER_TEMP/ecotracker-key-artifact.zip"
+          unzip -q "$RUNNER_TEMP/ecotracker-key-artifact.zip" -d "$KEY_DIR"
+          test -f "$KEY_DIR/ecotracker-upload-key.jks"
+          test -f "$KEY_DIR/UPLOAD-KEY-CREDENTIALS.txt"
+
+          STORE_PASSWORD="$(sed -n 's/^Keystore password: //p' "$KEY_DIR/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+          KEY_PASSWORD="$(sed -n 's/^Key password: //p' "$KEY_DIR/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+          KEY_ALIAS="$(sed -n 's/^Alias: //p' "$KEY_DIR/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_PASSWORD"
+          test -n "$KEY_ALIAS"
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_PASSWORD"
+          echo "ECOT_UPLOAD_KEYSTORE=$KEY_DIR/ecotracker-upload-key.jks" >> "$GITHUB_ENV"
+          echo "ECOT_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ECOT_UPLOAD_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ECOT_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+
+          KEY_FP="$(keytool -list -v -keystore "$KEY_DIR/ecotracker-upload-key.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
+          EXPECTED_FP="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
+          test "$KEY_FP" = "$EXPECTED_FP"
+          echo "Permanent upload key fingerprint verified."
+
+      - name: Generate native Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: npx expo prebuild --platform android --clean
+
+      - name: Install definitive EcoTracker launcher icons
+        working-directory: mobile
+        run: node install-android-icons.cjs
+
+      - name: Verify launcher resources before build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f mobile/android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          test -f mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          test -f mobile/android/app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
+          grep -q 'android:icon="@mipmap/ic_launcher"' mobile/android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/ic_launcher_round"' mobile/android/app/src/main/AndroidManifest.xml
+
+      - name: Configure permanent release signing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("mobile/android/app/build.gradle")
+          text = path.read_text(encoding="utf-8")
+          marker = "signingConfigs {"
+          if marker not in text:
+              raise SystemExit("signingConfigs block not found")
+
+          upload_block = '''signingConfigs {
+                  upload {
+                      storeFile file(System.getenv("ECOT_UPLOAD_KEYSTORE"))
+                      storePassword System.getenv("ECOT_UPLOAD_STORE_PASSWORD")
+                      keyAlias System.getenv("ECOT_UPLOAD_KEY_ALIAS")
+                      keyPassword System.getenv("ECOT_UPLOAD_KEY_PASSWORD")
+                  }
+          '''
+          text = text.replace(marker, upload_block, 1)
+          target = "signingConfig signingConfigs.debug"
+          position = text.rfind(target)
+          if position < 0:
+              raise SystemExit("release signingConfig not found")
+          text = text[:position] + "signingConfig signingConfigs.upload" + text[position + len(target):]
+          path.write_text(text, encoding="utf-8")
+          print("Release signing configured with permanent EcoTracker upload key.")
+
+      - name: Build signed AAB and APK
+        working-directory: mobile/android
+        env:
+          CI: "1"
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
+
+      - name: Validate signed release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="mobile/android/app/build/outputs/bundle/release/app-release.aab"
+          APK="mobile/android/app/build/outputs/apk/release/app-release.apk"
+          OUT="$GITHUB_WORKSPACE/ecotracker-v4-release"
+          mkdir -p "$OUT"
+          test -f "$AAB"
+          test -f "$APK"
+
+          # AAB: assinatura e bundle JS.
+          jarsigner -verify -verbose -certs "$AAB" > "$OUT/AAB-SIGNATURE.txt"
+          grep -q "jar verified" "$OUT/AAB-SIGNATURE.txt"
+          AAB_FP="$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
+          EXPECTED_FP="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
+          test "$AAB_FP" = "$EXPECTED_FP"
+          unzip -l "$AAB" > "$OUT/AAB-CONTENTS.txt"
+          grep -q "base/assets/index.android.bundle" "$OUT/AAB-CONTENTS.txt"
+          grep -q "base/res/mipmap-anydpi-v33/ic_launcher.xml" "$OUT/AAB-CONTENTS.txt"
+
+          # APK: identidade, versão, assinatura moderna, bundle JS e app icon.
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$AAPT"
+          test -x "$APKSIGNER"
+          "$AAPT" dump badging "$APK" > "$OUT/APK-BADGING.txt"
+          grep -q "package: name='com.alternativeventures.ecotracker'" "$OUT/APK-BADGING.txt"
+          grep -q "versionCode='4'" "$OUT/APK-BADGING.txt"
+          grep -q "versionName='1.0.3'" "$OUT/APK-BADGING.txt"
+          grep -q "application-label:'EcoTracker'" "$OUT/APK-BADGING.txt"
+          grep -q "application-icon" "$OUT/APK-BADGING.txt"
+
+          "$APKSIGNER" verify --verbose --print-certs "$APK" > "$OUT/APK-SIGNATURE.txt"
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" "$OUT/APK-SIGNATURE.txt"
+          APK_FP="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$OUT/APK-SIGNATURE.txt" | head -1 | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g;s/:$//' )"
+          test "$APK_FP" = "$EXPECTED_FP"
+          unzip -l "$APK" > "$OUT/APK-CONTENTS.txt"
+          grep -q "assets/index.android.bundle" "$OUT/APK-CONTENTS.txt"
+
+          # Confirma que a API de produção está embutida no bundle JavaScript.
+          unzip -p "$APK" assets/index.android.bundle | grep -a -q "https://ecotracker-api-cik7.onrender.com/api"
+
+          cp "$AAB" "$OUT/EcoTracker-1.0.3-build4-play.aab"
+          cp "$APK" "$OUT/EcoTracker-1.0.3-build4-release.apk"
+          (
+            cd "$OUT"
+            sha256sum EcoTracker-1.0.3-build4-play.aab EcoTracker-1.0.3-build4-release.apk > SHA256SUMS.txt
+          )
+
+          cat > "$OUT/VALIDATION.txt" <<EOF
+          EcoTracker Android release validation
+          Package: com.alternativeventures.ecotracker
+          Version: 1.0.3
+          Version code: 4
+          App label: EcoTracker
+          Upload certificate SHA-256: $EXPECTED_FP
+          AAB: signed, JavaScript bundle embedded, launcher resources present
+          APK: signed with v2+ scheme, JavaScript bundle embedded, production API present
+          EOF
+
+      - name: Upload signed release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-1.0.3-build4-signed-release
+          path: ecotracker-v4-release/
+          if-no-files-found: error
+          retention-days: 30
