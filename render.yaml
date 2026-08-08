@@ -40,10 +40,20 @@ services:
         value: "0"
       - key: ECOT_TAX_RESERVE_PCT
         value: "0"
+      - key: ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS
+        value: "5"
+      - key: ECOT_ELIGIBILITY_MAX_AGE_HOURS
+        value: "168"
+      - key: ECOT_MIN_VERIFIED_OFFSET_ASSETS
+        value: "2"
       - key: REGEN_PUBLISHED_ORDER_LIMIT
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
         value: "15000"
+      - key: CARBONMARK_API_BASE
+        value: https://v18.api.carbonmark.com
+      - key: CARBONMARK_API_KEY
+        sync: false
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET

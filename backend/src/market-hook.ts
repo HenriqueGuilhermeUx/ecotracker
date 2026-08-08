@@ -1,9 +1,11 @@
 import express from "express";
 import { initMarketDb } from "./market-db.js";
 import { initCommerceDb } from "./commerce-db.js";
+import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
+import { registerEligibilityRoutes } from "./eligibility-routes.js";
 import { registerMarketRoutes } from "./market-routes.js";
 import { registerPrivacyRoutes } from "./privacy-routes.js";
 import { startCommerceWorker } from "./commerce-service.js";
@@ -32,10 +34,14 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
+    // A trava de elegibilidade precisa ser registrada antes da criação pública de cotação.
+    registerEligibilityRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
-    // quote_requests nasce em initMarketDb e só depois recebe as colunas comerciais.
+    // quote_requests nasce em initMarketDb; a elegibilidade adiciona campos/snapshot;
+    // depois o módulo de comércio adiciona pagamento e fulfillment.
     void initMarketDb()
+      .then(() => initEligibilityDb())
       .then(() => initCommerceDb())
       .then(() => initPrivacyDb())
       .then(() => {
