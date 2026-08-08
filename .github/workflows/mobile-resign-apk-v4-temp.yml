@@ -1,0 +1,126 @@
+name: EcoTracker Re-sign APK V4
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-resign-apk-v4-temp.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resign-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download validated v4 APK and permanent key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/apk" "$RUNNER_TEMP/key"
+          curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9024835285/zip" -o "$RUNNER_TEMP/apk.zip"
+          unzip -q "$RUNNER_TEMP/apk.zip" -d "$RUNNER_TEMP/apk"
+          SOURCE_APK="$(find "$RUNNER_TEMP/apk" -name '*.apk' -type f | head -1)"
+          test -n "$SOURCE_APK"
+          echo "SOURCE_APK=$SOURCE_APK" >> "$GITHUB_ENV"
+
+          curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8938980084/zip" -o "$RUNNER_TEMP/key.zip"
+          unzip -q "$RUNNER_TEMP/key.zip" -d "$RUNNER_TEMP/key"
+          test -f "$RUNNER_TEMP/key/ecotracker-upload-key.jks"
+          test -f "$RUNNER_TEMP/key/UPLOAD-KEY-CREDENTIALS.txt"
+
+          STORE_PASSWORD="$(sed -n 's/^Keystore password: //p' "$RUNNER_TEMP/key/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+          KEY_PASSWORD="$(sed -n 's/^Key password: //p' "$RUNNER_TEMP/key/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+          KEY_ALIAS="$(sed -n 's/^Alias: //p' "$RUNNER_TEMP/key/UPLOAD-KEY-CREDENTIALS.txt" | head -1)"
+          test -n "$STORE_PASSWORD"; test -n "$KEY_PASSWORD"; test -n "$KEY_ALIAS"
+          echo "::add-mask::$STORE_PASSWORD"; echo "::add-mask::$KEY_PASSWORD"
+          echo "ECOT_KEYSTORE=$RUNNER_TEMP/key/ecotracker-upload-key.jks" >> "$GITHUB_ENV"
+          echo "ECOT_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ECOT_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "ECOT_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+
+      - name: Verify permanent key fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
+          FP="$(keytool -list -v -keystore "$ECOT_KEYSTORE" -storepass "$ECOT_STORE_PASSWORD" -alias "$ECOT_KEY_ALIAS" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
+          test "$FP" = "$EXPECTED"
+          echo "Permanent EcoTracker upload certificate verified."
+
+      - name: Align and sign APK with permanent upload key
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          test -x "$ZIPALIGN"; test -x "$APKSIGNER"
+          mkdir -p release
+          "$ZIPALIGN" -f -p 4 "$SOURCE_APK" release/EcoTracker-v4-aligned.apk
+          "$APKSIGNER" sign \
+            --ks "$ECOT_KEYSTORE" \
+            --ks-key-alias "$ECOT_KEY_ALIAS" \
+            --ks-pass "pass:$ECOT_STORE_PASSWORD" \
+            --key-pass "pass:$ECOT_KEY_PASSWORD" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out release/EcoTracker-1.0.3-build4-release.apk \
+            release/EcoTracker-v4-aligned.apk
+          rm release/EcoTracker-v4-aligned.apk
+
+      - name: Validate final APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="release/EcoTracker-1.0.3-build4-release.apk"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          "$AAPT" dump badging "$APK" | tee release/APK-BADGING.txt
+          grep -q "package: name='com.alternativeventures.ecotracker'" release/APK-BADGING.txt
+          grep -q "versionCode='4'" release/APK-BADGING.txt
+          grep -q "versionName='1.0.3'" release/APK-BADGING.txt
+          grep -q "application-label:'EcoTracker'" release/APK-BADGING.txt
+          grep -q "application-icon" release/APK-BADGING.txt
+
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee release/APK-SIGNATURE.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" release/APK-SIGNATURE.txt
+          FP_RAW="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release/APK-SIGNATURE.txt | head -1)"
+          FP="$(echo "$FP_RAW" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g;s/:$//')"
+          EXPECTED="06:5F:DD:F3:22:AB:DF:F2:96:67:4F:6D:24:32:46:53:A5:1C:94:C1:53:9B:5D:EF:4F:95:F8:32:F6:A6:04:EF"
+          test "$FP" = "$EXPECTED"
+
+          unzip -l "$APK" > release/APK-CONTENTS.txt
+          grep -q "assets/index.android.bundle" release/APK-CONTENTS.txt
+          unzip -p "$APK" assets/index.android.bundle | grep -a -q "https://ecotracker-api-cik7.onrender.com/api"
+          sha256sum "$APK" > release/SHA256SUMS.txt
+          cat > release/VALIDATION.txt <<EOF
+          EcoTracker Android APK release
+          Package: com.alternativeventures.ecotracker
+          Version: 1.0.3
+          Version code: 4
+          Label: EcoTracker
+          Permanent upload certificate SHA-256: $EXPECTED
+          APK Signature Scheme v2: verified
+          JavaScript bundle: embedded
+          Production API endpoint: embedded
+          Launcher icon: declared in manifest/badging
+          EOF
+
+      - name: Upload final signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-1.0.3-build4-permanent-apk
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
