@@ -9,6 +9,7 @@ import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js
 import { assetProjection } from "./market-db.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
 import { getSourcingOpportunityReport } from "./sourcing-opportunities.js";
+import { enrichX402CfcIfStale } from "./x402-cfc-enrichment.js";
 
 const fail = (res: Response, error: unknown) =>
   res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
@@ -25,10 +26,16 @@ async function refreshGoldStandardProvider(force: boolean) {
   return { market, enrichment };
 }
 
+async function refreshX402Provider(force: boolean) {
+  const market = force ? await refreshKlimaX402Assets() : await refreshKlimaX402IfStale();
+  const cfcEnrichment = await enrichX402CfcIfStale(force ? 0 : 5 * 60 * 1000);
+  return { market, cfcEnrichment };
+}
+
 async function synchronizeAndRank(forceProviders = false) {
   const results = await Promise.allSettled([
     forceProviders ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
-    forceProviders ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
+    refreshX402Provider(forceProviders),
     refreshGoldStandardProvider(forceProviders),
   ]);
   const carbonmark = settledProvider(results[0], "carbonmark");
