@@ -3,18 +3,21 @@ import { requireAdmin } from "./auth.js";
 import { refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
+import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { assetProjection } from "./market-db.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
+import { getSourcingOpportunityReport } from "./sourcing-opportunities.js";
 
 const fail = (res: Response, error: unknown) =>
   res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
 
-async function synchronizeAndRank(forceCarbonmark = false) {
-  const carbonmark = forceCarbonmark
-    ? await refreshCarbonmarkAssets()
-    : await refreshCarbonmarkIfStale();
-  const sourcing = await rankSourcingInventory(forceCarbonmark ? 0 : undefined);
-  return { carbonmark, sourcing };
+async function synchronizeAndRank(forceProviders = false) {
+  const [carbonmark, klimaX402] = await Promise.all([
+    forceProviders ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
+    forceProviders ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
+  ]);
+  const sourcing = await rankSourcingInventory(forceProviders ? 0 : undefined);
+  return { carbonmark, klimaX402, sourcing };
 }
 
 async function listRankedAssets() {
@@ -71,7 +74,7 @@ function publicCandidate(asset: Record<string, unknown>, requestedKg: number, pu
 }
 
 export function registerSourcingRoutes(app: Application) {
-  // Estas rotas entram depois do middleware Carbonmark e antes das rotas genéricas.
+  // Estas rotas entram depois dos middlewares de provedores e antes das rotas genéricas.
   // Assim o site/app recebe o catálogo já ranqueado, sem mudar o contrato básico.
   app.get("/api/market/assets", async (_req: Request, res: Response) => {
     try {
@@ -133,6 +136,7 @@ export function registerSourcingRoutes(app: Application) {
           defaultMaxVintageAgeYears: Math.max(1, Number(process.env.ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS || 5)),
           eligibilityReviewMaxAgeHours: Math.max(1, Number(process.env.ECOT_ELIGIBILITY_MAX_AGE_HOURS || 168)),
           carbonmarkPublishedListingLimit: Math.max(1, Number(process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT || 100)),
+          klimaX402PublishedCreditLimit: Math.max(1, Number(process.env.KLIMA_X402_PUBLISHED_CREDIT_LIMIT || 100)),
           note: "O sourcing amplia a descoberta, mas a prateleira de compensação continua sujeita à política de elegibilidade EcoTracker.",
         },
       });
@@ -144,7 +148,7 @@ export function registerSourcingRoutes(app: Application) {
       const result = await synchronizeAndRank(false);
       const channels = await pool.query("SELECT provider_key,provider_name,sourcing_mode,status,min_order_kg,fractional_supported,retirement_supported,beneficiary_retirement_supported,last_checked_at FROM offset_source_channels ORDER BY provider_name");
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...result.sourcing, carbonmark: result.carbonmark, channels: channels.rows });
+      res.json({ ...result.sourcing, carbonmark: result.carbonmark, klimaX402: result.klimaX402, channels: channels.rows });
     } catch (error) {
       res.status(503).json({ error: error instanceof Error ? error.message : "Sourcing indisponível" });
     }
@@ -169,12 +173,23 @@ export function registerSourcingRoutes(app: Application) {
   app.post("/api/admin/market/sourcing/refresh", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const result = await synchronizeAndRank(true);
-      const channels = await pool.query("SELECT * FROM offset_source_channels ORDER BY provider_name");
+      const [channels, opportunities] = await Promise.all([
+        pool.query("SELECT * FROM offset_source_channels ORDER BY provider_name"),
+        getSourcingOpportunityReport(),
+      ]);
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...result, channels: channels.rows });
+      res.json({ ...result, channels: channels.rows, opportunities });
     } catch (error) {
       res.status(503).json({ error: error instanceof Error ? error.message : "Falha ao atualizar sourcing" });
     }
+  });
+
+  app.get("/api/admin/market/sourcing/opportunities", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      await rankSourcingInventory();
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getSourcingOpportunityReport());
+    } catch (error) { fail(res, error); }
   });
 
   app.get("/api/admin/market/sourcing/candidates", requireAdmin, async (_req: Request, res: Response) => {
