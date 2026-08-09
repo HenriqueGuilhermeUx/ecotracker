@@ -43,13 +43,11 @@ jobs:
         working-directory: backend
         run: npm run build
 
-      - name: Backend PostgreSQL init smoke
+      - name: PostgreSQL base schema smoke
         working-directory: backend
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_ci
           NODE_ENV: test
-          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
-          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
         run: |
           node --input-type=module <<'NODE'
           import { initDb, pool } from './dist/db.js';
@@ -61,29 +59,38 @@ jobs:
           import { initDemandDeskDb } from './dist/demand-desk-db.js';
           import { initDemandProposalDb } from './dist/demand-proposal-db.js';
           import { initCorporateBasketDb } from './dist/corporate-basket-db.js';
-          import { initCorporateBasketPaymentDb, corporateBasketPaymentStatus } from './dist/corporate-basket-payment-db.js';
-          import { initPrivacyDb } from './dist/privacy-db.js';
-          import { initSourcingAutopilotDb } from './dist/sourcing-autopilot.js';
-
           try {
-            await initDb();
-            await initMarketDb();
-            await initEligibilityDb();
-            await initCommerceDb();
-            await initAssistedSourcingDb();
-            await initSupplyDeskDb();
-            await initDemandDeskDb();
-            await initDemandProposalDb();
-            await initCorporateBasketDb();
-            await initCorporateBasketPaymentDb();
-            await initPrivacyDb();
-            await initSourcingAutopilotDb();
+            await initDb(); console.log('initDb OK');
+            await initMarketDb(); console.log('initMarketDb OK');
+            await initEligibilityDb(); console.log('initEligibilityDb OK');
+            await initCommerceDb(); console.log('initCommerceDb OK');
+            await initAssistedSourcingDb(); console.log('initAssistedSourcingDb OK');
+            await initSupplyDeskDb(); console.log('initSupplyDeskDb OK');
+            await initDemandDeskDb(); console.log('initDemandDeskDb OK');
+            await initDemandProposalDb(); console.log('initDemandProposalDb OK');
+            await initCorporateBasketDb(); console.log('initCorporateBasketDb OK');
+          } finally {
+            await pool.end();
+          }
+          NODE
 
+      - name: PostgreSQL basket payment schema smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_ci
+          NODE_ENV: test
+          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
+          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
+        run: |
+          node --input-type=module <<'NODE'
+          import { pool } from './dist/db.js';
+          import { initCorporateBasketPaymentDb, corporateBasketPaymentStatus } from './dist/corporate-basket-payment-db.js';
+          try {
+            await initCorporateBasketPaymentDb();
             const payment = await corporateBasketPaymentStatus();
             if (payment.live !== false || payment.database?.payment_enabled !== false) {
               throw new Error(`Basket payment deveria iniciar desligado: ${JSON.stringify(payment)}`);
             }
-
             const triggers = await pool.query(`
               SELECT tgname FROM pg_trigger
               WHERE NOT tgisinternal
@@ -94,7 +101,25 @@ jobs:
             for (const expected of ['guard_basket_checkout_disabled','guard_basket_asset_reservation','guard_reserved_basket_leg_mutation']) {
               if (!names.includes(expected)) throw new Error(`Trigger ausente: ${expected}`);
             }
-            console.log('PostgreSQL init smoke OK:', { basketPaymentLive: payment.live, triggers: names });
+            console.log('Basket Payment DB smoke OK:', { basketPaymentLive: payment.live, triggers: names });
+          } finally {
+            await pool.end();
+          }
+          NODE
+
+      - name: PostgreSQL final modules smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_ci
+          NODE_ENV: test
+        run: |
+          node --input-type=module <<'NODE'
+          import { pool } from './dist/db.js';
+          import { initPrivacyDb } from './dist/privacy-db.js';
+          import { initSourcingAutopilotDb } from './dist/sourcing-autopilot.js';
+          try {
+            await initPrivacyDb(); console.log('initPrivacyDb OK');
+            await initSourcingAutopilotDb(); console.log('initSourcingAutopilotDb OK');
           } finally {
             await pool.end();
           }
