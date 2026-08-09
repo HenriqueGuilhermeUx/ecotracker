@@ -104,6 +104,10 @@ services:
         value: "4"
       - key: GOLD_STANDARD_ENRICH_INTERVAL_MS
         value: "600000"
+      - key: PURO_REGISTRY_API_BASE
+        value: https://registry.api.puro.earth/registry/api
+      - key: PURO_REGISTRY_BASIC_AUTH
+        sync: false
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET
