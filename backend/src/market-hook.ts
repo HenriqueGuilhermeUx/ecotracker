@@ -1,6 +1,8 @@
 import express from "express";
 import { initMarketDb } from "./market-db.js";
 import { initCommerceDb } from "./commerce-db.js";
+import { initDemandDeskDb } from "./demand-desk-db.js";
+import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
@@ -61,6 +63,7 @@ if (!proto.__marketInstalled) {
     registerAssistedSourcingOpsRoutes(app);
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
+    registerDemandDeskRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
 
@@ -69,6 +72,7 @@ if (!proto.__marketInstalled) {
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
       .then(() => initSupplyDeskDb())
+      .then(() => initDemandDeskDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
