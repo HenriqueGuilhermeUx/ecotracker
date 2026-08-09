@@ -68,6 +68,12 @@ services:
         value: "5"
       - key: ECOT_SOURCING_RANK_MAX_AGE_MS
         value: "60000"
+      - key: ECOT_SOURCING_AUTOPILOT_DISABLED
+        value: "false"
+      - key: ECOT_SOURCING_AUTOPILOT_INTERVAL_MS
+        value: "600000"
+      - key: ECOT_SOURCING_REPLENISH_MIN_INTERVAL_MS
+        value: "900000"
       - key: REGEN_PUBLISHED_ORDER_LIMIT
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
@@ -84,6 +90,8 @@ services:
         value: https://x402.klimalabs.com
       - key: KLIMA_X402_PUBLISHED_CREDIT_LIMIT
         value: "100"
+      - key: KLIMA_X402_EXECUTION_ENABLED
+        value: "false"
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET

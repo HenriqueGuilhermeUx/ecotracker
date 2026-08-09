@@ -13,6 +13,8 @@ import { refreshKlimaX402IfStale } from "./klima-x402.js";
 import { registerMarketRoutes } from "./market-routes.js";
 import { registerPrivacyRoutes } from "./privacy-routes.js";
 import { registerSourcingRoutes } from "./sourcing-routes.js";
+import { registerSourcingAutopilotRoutes } from "./sourcing-autopilot-routes.js";
+import { initSourcingAutopilotDb, startSourcingAutopilot } from "./sourcing-autopilot.js";
 import { rankSourcingInventory } from "./sourcing-engine.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
@@ -44,24 +46,26 @@ if (!proto.__marketInstalled) {
     registerCarbonmarkRoutes(app);
     // x402 amplia o discovery sem chave, mas permanece read-only e bloqueia checkout nesta fase.
     registerKlimaX402Routes(app);
-    // O sourcing entra depois dos provedores e antes das rotas de elegibilidade.
-    // Ele ordena o catálogo por executabilidade, integridade, fracionamento e disponibilidade.
+    // Sourcing e Autopilot ficam depois dos provedores e antes das rotas genéricas.
     registerSourcingRoutes(app);
+    registerSourcingAutopilotRoutes(app);
     // A trava de elegibilidade continua protegendo todas as fontes e todas as cotações.
     registerEligibilityRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
     // quote_requests nasce em initMarketDb; a elegibilidade adiciona campos/snapshot;
-    // depois o módulo de comércio adiciona pagamento e fulfillment.
+    // depois o módulo de comércio e o Autopilot adicionam suas estruturas operacionais.
     void initMarketDb()
       .then(() => initEligibilityDb())
       .then(() => initCommerceDb())
       .then(() => initPrivacyDb())
+      .then(() => initSourcingAutopilotDb())
       .then(async () => {
         // Nenhum provedor impede o boot se estiver temporariamente indisponível.
         await refreshCarbonmarkIfStale(0).catch((error) => console.warn("[carbonmark] initial refresh failed", error));
         await refreshKlimaX402IfStale(0).catch((error) => console.warn("[klima-x402] initial refresh failed", error));
         await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
+        startSourcingAutopilot();
         startCommerceWorker();
         return original.apply(this, args);
       })
