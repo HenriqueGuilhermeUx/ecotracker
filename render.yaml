@@ -124,6 +124,10 @@ services:
         sync: false
       - key: MP_USE_SANDBOX
         value: "true"
+      - key: ECOT_COMMERCIAL_OUTREACH_ENABLED
+        value: "false"
+      - key: ECOT_COMMERCIAL_OUTREACH_ACK
+        value: "DISABLED"
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
