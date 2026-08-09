@@ -90,7 +90,10 @@ export async function createDemandProposal(input: {
   const pricePerTonneBrl = finalTotalBrl != null && coveredTonnes > 0 ? Number((finalTotalBrl / coveredTonnes).toFixed(2)) : null;
   const executionMode = modes.size === 1 ? [...modes][0] : "mixed";
   const fullyCovered = uncoveredTonnes <= 0.0005;
-  const checkoutMode = fullyCovered && itemDrafts.length === 1 ? "single_asset_quote" : "basket_quote_required";
+  const withinSingleAssetCheckoutLimit = requestedKg <= 10_000_000;
+  const checkoutMode = fullyCovered && itemDrafts.length === 1 && withinSingleAssetCheckoutLimit
+    ? "single_asset_quote"
+    : "basket_quote_required";
   const validityMinutes = Math.max(5, Math.min(10080, Math.round(input.validityMinutes || 60)));
   const expiresAt = new Date(Date.now() + validityMinutes * 60 * 1000).toISOString();
 
@@ -122,6 +125,7 @@ export async function createDemandProposal(input: {
     } : { indicative: false, reason: "one_or_more_sources_require_live_quote" },
     checkoutMode,
     executionMode,
+    singleAssetCheckoutLimitKg: 10_000_000,
     items: itemDrafts,
     claimRule: "O inventário corporativo permanece reportado separadamente. A compensação só se conclui após aposentadoria exclusiva dos créditos para o beneficiário.",
     createdAt: new Date().toISOString(),
@@ -174,7 +178,9 @@ export async function createDemandProposal(input: {
       } : null,
       basketQuoteRequired: checkoutMode === "basket_quote_required",
       warning: checkoutMode === "basket_quote_required"
-        ? "A proposta usa múltiplos lotes ou cobertura parcial. O checkout atual é single-asset; não criar cobrança única até a basket rail ser implementada."
+        ? (fullyCovered
+          ? "A proposta exige a rail corporativa basket por volume enterprise ou múltiplos lotes."
+          : "A proposta ainda tem cobertura parcial; refaça o matching antes de criar o basket.")
         : "Template pronto para criar a cotação single-asset existente, sujeito a revalidação de preço/estoque no momento da cotação.",
     };
   });
