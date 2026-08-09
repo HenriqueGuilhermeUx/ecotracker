@@ -1,5 +1,6 @@
 import { refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
+import { refreshGoldStandardIfStale, refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
 import { getSourcingOpportunityReport } from "./sourcing-opportunities.js";
@@ -41,8 +42,13 @@ async function refreshProviders(force: boolean): Promise<ProviderResult[]> {
   const results = await Promise.allSettled([
     force ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
     force ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
+    force ? refreshGoldStandardMarketplace() : refreshGoldStandardIfStale(),
   ]);
-  return [settledProvider(results[0], "carbonmark"), settledProvider(results[1], "klima-x402")];
+  return [
+    settledProvider(results[0], "carbonmark"),
+    settledProvider(results[1], "klima-x402"),
+    settledProvider(results[2], "gold-standard"),
+  ];
 }
 
 export async function initSourcingAutopilotDb() {

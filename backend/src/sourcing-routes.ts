@@ -3,6 +3,7 @@ import { requireAdmin } from "./auth.js";
 import { refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
+import { refreshGoldStandardIfStale, refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { assetProjection } from "./market-db.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
@@ -21,15 +22,19 @@ async function synchronizeAndRank(forceProviders = false) {
   const results = await Promise.allSettled([
     forceProviders ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
     forceProviders ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
+    forceProviders ? refreshGoldStandardMarketplace() : refreshGoldStandardIfStale(),
   ]);
   const carbonmark = settledProvider(results[0], "carbonmark");
   const klimaX402 = settledProvider(results[1], "klima-x402");
+  const goldStandard = settledProvider(results[2], "gold-standard");
+  const providers = [carbonmark, klimaX402, goldStandard];
   const sourcing = await rankSourcingInventory(forceProviders ? 0 : undefined);
   return {
     carbonmark,
     klimaX402,
-    providersHealthy: Number(carbonmark.ok) + Number(klimaX402.ok),
-    providersDegraded: Number(!carbonmark.ok) + Number(!klimaX402.ok),
+    goldStandard,
+    providersHealthy: providers.filter((provider) => provider.ok).length,
+    providersDegraded: providers.filter((provider) => !provider.ok).length,
     sourcing,
   };
 }
@@ -88,8 +93,6 @@ function publicCandidate(asset: Record<string, unknown>, requestedKg: number, pu
 }
 
 export function registerSourcingRoutes(app: Application) {
-  // Estas rotas entram depois dos middlewares de provedores e antes das rotas genéricas.
-  // Assim o site/app recebe o catálogo já ranqueado, sem mudar o contrato básico.
   app.get("/api/market/assets", async (_req: Request, res: Response) => {
     try {
       await rankSourcingInventory();
@@ -151,6 +154,7 @@ export function registerSourcingRoutes(app: Application) {
           eligibilityReviewMaxAgeHours: Math.max(1, Number(process.env.ECOT_ELIGIBILITY_MAX_AGE_HOURS || 168)),
           carbonmarkPublishedListingLimit: Math.max(1, Number(process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT || 100)),
           klimaX402PublishedCreditLimit: Math.max(1, Number(process.env.KLIMA_X402_PUBLISHED_CREDIT_LIMIT || 100)),
+          goldStandardPublishedProductLimit: Math.max(1, Number(process.env.GOLD_STANDARD_PUBLISHED_PRODUCT_LIMIT || 100)),
           note: "O sourcing amplia a descoberta, mas a prateleira de compensação continua sujeita à política de elegibilidade EcoTracker.",
         },
       });
@@ -162,7 +166,15 @@ export function registerSourcingRoutes(app: Application) {
       const result = await synchronizeAndRank(false);
       const channels = await pool.query("SELECT provider_key,provider_name,sourcing_mode,status,min_order_kg,fractional_supported,retirement_supported,beneficiary_retirement_supported,last_checked_at FROM offset_source_channels ORDER BY provider_name");
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...result.sourcing, carbonmark: result.carbonmark, klimaX402: result.klimaX402, providersHealthy: result.providersHealthy, providersDegraded: result.providersDegraded, channels: channels.rows });
+      res.json({
+        ...result.sourcing,
+        carbonmark: result.carbonmark,
+        klimaX402: result.klimaX402,
+        goldStandard: result.goldStandard,
+        providersHealthy: result.providersHealthy,
+        providersDegraded: result.providersDegraded,
+        channels: channels.rows,
+      });
     } catch (error) {
       res.status(503).json({ error: error instanceof Error ? error.message : "Sourcing indisponível" });
     }
