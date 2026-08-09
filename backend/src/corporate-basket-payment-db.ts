@@ -7,6 +7,11 @@ function livePaymentAcknowledged() {
 
 export async function initCorporateBasketPaymentDb(): Promise<void> {
   const enabled = livePaymentAcknowledged();
+
+  // DDL precisa rodar sem bind parameters: node-postgres usa o extended query
+  // protocol quando há valores e o PostgreSQL não aceita vários comandos em uma
+  // prepared statement. O estado dinâmico da feature flag é gravado depois, em
+  // uma query parametrizada isolada.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS corporate_basket_payment_settings (
       singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton=TRUE),
@@ -14,10 +19,6 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
       mode VARCHAR(30) NOT NULL DEFAULT 'disabled',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
-    INSERT INTO corporate_basket_payment_settings(singleton,payment_enabled,mode)
-    VALUES(TRUE,$1,$2)
-    ON CONFLICT(singleton) DO UPDATE SET payment_enabled=EXCLUDED.payment_enabled,mode=EXCLUDED.mode,updated_at=NOW();
 
     ALTER TABLE corporate_baskets
       ADD COLUMN IF NOT EXISTS payment_provider VARCHAR(40),
@@ -70,7 +71,18 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
       ON corporate_basket_payment_attempts(provider,provider_reference);
     CREATE INDEX IF NOT EXISTS corporate_basket_events_basket_idx
       ON corporate_basket_events(basket_id,created_at DESC);
+  `);
 
+  await pool.query(`
+    INSERT INTO corporate_basket_payment_settings(singleton,payment_enabled,mode)
+    VALUES(TRUE,$1,$2)
+    ON CONFLICT(singleton) DO UPDATE SET
+      payment_enabled=EXCLUDED.payment_enabled,
+      mode=EXCLUDED.mode,
+      updated_at=NOW()
+  `, [enabled, enabled ? "live_acknowledged" : "disabled"]);
+
+  await pool.query(`
     CREATE OR REPLACE FUNCTION ecotracker_guard_basket_checkout_disabled()
     RETURNS TRIGGER AS $$
     DECLARE
@@ -174,7 +186,7 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
     CREATE TRIGGER guard_basket_asset_reservation
       BEFORE INSERT OR UPDATE OF status,reserved_kg,expires_at,asset_id ON corporate_basket_reservations
       FOR EACH ROW EXECUTE FUNCTION ecotracker_guard_basket_asset_reservation();
-  `, [enabled, enabled ? "live_acknowledged" : "disabled"]);
+  `);
 }
 
 export async function corporateBasketPaymentStatus() {
