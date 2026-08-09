@@ -13,16 +13,18 @@ jobs:
           set -u
           BASE="https://ecotracker-api-cik7.onrender.com"
 
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 28); do
             health_code=$(curl -sS --max-time 20 -o health.json -w '%{http_code}' "$BASE/api/health" || true)
             x402_code=$(curl -sS --max-time 60 -o x402-status.json -w '%{http_code}' "$BASE/api/market/klima-x402/status" || true)
-            if [ "$health_code" = "200" ] && [ "$x402_code" = "200" ]; then
-              echo "production + x402 healthy on attempt $attempt"
+            gs_code=$(curl -sS --max-time 90 -o gold-standard-status.json -w '%{http_code}' "$BASE/api/market/gold-standard/status" || true)
+            gs_enrichment=$(jq -r 'has("enrichment")' gold-standard-status.json 2>/dev/null || echo false)
+            if [ "$health_code" = "200" ] && [ "$x402_code" = "200" ] && [ "$gs_code" = "200" ] && [ "$gs_enrichment" = "true" ]; then
+              echo "new production sourcing deployment healthy on attempt $attempt"
               break
             fi
-            echo "attempt=$attempt health=$health_code x402=$x402_code"
-            if [ "$attempt" -eq 24 ]; then
-              echo "production did not reach full provider health in probe window"
+            echo "attempt=$attempt health=$health_code x402=$x402_code goldStandard=$gs_code enrichment=$gs_enrichment"
+            if [ "$attempt" -eq 28 ]; then
+              echo "production did not reach enriched Gold Standard deployment in probe window"
             else
               sleep 15
             fi
@@ -42,6 +44,7 @@ jobs:
           fetch x402-status /api/market/klima-x402/status
           fetch carbonmark-status /api/market/carbonmark/status
           fetch assets /api/market/assets
+          fetch compensation-assets '/api/market/compensation-assets?kg=1000'
 
           echo '=== HTTP STATUS ==='
           for f in *.status; do echo "$f=$(cat "$f")"; done
@@ -66,6 +69,11 @@ jobs:
             jq -c . "$f.json" 2>/dev/null || cat "$f.json" 2>/dev/null || true
           done
 
+          if jq -e 'type == "array"' compensation-assets.json >/dev/null 2>&1; then
+            echo '=== VERIFIED COMPENSATION ASSETS @ 1000 KG ==='
+            jq -c '{count:length,assets:[.[]|{id,registry,project_name,vintage,available_tons,min_order_kg,execution_mode,pricing_mode,sourcing_score,sourcing_tier,sourcing_executable,eligibilityDecision}]}' compensation-assets.json
+          fi
+
           if jq -e 'type == "array"' assets.json >/dev/null 2>&1; then
             echo '=== ASSET COUNTS BY SOURCE ==='
             jq -c '{
@@ -82,11 +90,9 @@ jobs:
               id,project_name,vintage,available_tons,min_order_kg,source_price_usd_ton,availability_status,source_status,
               claim_category,eligibility_status,source_unit_status,retirement_supported,beneficiary_retirement_supported,
               registry_evidence_url,sourcing_score,sourcing_tier,sourcing_shelf,sourcing_executable,
+              catalogEnrichment:.monitor_details.catalogEnrichment,
               riskFlags:.eligibility_risk_flags
-            }] | sort_by(-(.sourcing_score|tonumber? // 0)) | .[0:30]' assets.json
-
-            echo '=== RECENT-VINTAGE GOLD STANDARD ==='
-            jq -c '[.[] | select((.source_reference // "")|startswith("gold-standard-marketplace-")) | select((.vintage // "")|test("2021|2022|2023|2024|2025|2026")) | {id,project_name,vintage,available_tons,source_price_usd_ton,availability_status,registry_evidence_url,riskFlags:.eligibility_risk_flags}]' assets.json
+            }] | sort_by(-(.sourcing_score|tonumber? // 0)) | .[0:40]' assets.json
           fi
 
       - name: Upload probe JSON
