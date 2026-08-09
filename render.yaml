@@ -80,6 +80,10 @@ services:
         value: "100"
       - key: CARBONMARK_API_KEY
         sync: false
+      - key: KLIMA_X402_BASE_URL
+        value: https://x402.klimalabs.com
+      - key: KLIMA_X402_PUBLISHED_CREDIT_LIMIT
+        value: "100"
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET

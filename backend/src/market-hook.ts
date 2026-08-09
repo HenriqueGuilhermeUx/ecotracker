@@ -8,6 +8,8 @@ import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
+import { registerKlimaX402Routes } from "./klima-x402-routes.js";
+import { refreshKlimaX402IfStale } from "./klima-x402.js";
 import { registerMarketRoutes } from "./market-routes.js";
 import { registerPrivacyRoutes } from "./privacy-routes.js";
 import { registerSourcingRoutes } from "./sourcing-routes.js";
@@ -38,9 +40,11 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
-    // Carbonmark é registrado primeiro: sincroniza o catálogo e trava o custo real da fonte.
+    // Carbonmark clássico é registrado primeiro: sincroniza o catálogo e trava o custo real da fonte.
     registerCarbonmarkRoutes(app);
-    // O sourcing entra depois do refresh Carbonmark e antes das rotas de elegibilidade.
+    // x402 amplia o discovery sem chave, mas permanece read-only e bloqueia checkout nesta fase.
+    registerKlimaX402Routes(app);
+    // O sourcing entra depois dos provedores e antes das rotas de elegibilidade.
     // Ele ordena o catálogo por executabilidade, integridade, fracionamento e disponibilidade.
     registerSourcingRoutes(app);
     // A trava de elegibilidade continua protegendo todas as fontes e todas as cotações.
@@ -54,9 +58,10 @@ if (!proto.__marketInstalled) {
       .then(() => initCommerceDb())
       .then(() => initPrivacyDb())
       .then(async () => {
-        // Não impede o boot se a Carbonmark estiver temporariamente indisponível.
+        // Nenhum provedor impede o boot se estiver temporariamente indisponível.
         await refreshCarbonmarkIfStale(0).catch((error) => console.warn("[carbonmark] initial refresh failed", error));
-        await rankSourcingInventory().catch((error) => console.warn("[sourcing] initial ranking failed", error));
+        await refreshKlimaX402IfStale(0).catch((error) => console.warn("[klima-x402] initial refresh failed", error));
+        await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
         startCommerceWorker();
         return original.apply(this, args);
       })
