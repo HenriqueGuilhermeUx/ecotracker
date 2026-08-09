@@ -44,7 +44,7 @@ async function candidateBundle(client:pg.PoolClient | typeof pool,rfqId:number,c
     JOIN market_maker_rfq_candidates c ON c.rfq_id=r.id
     LEFT JOIN supply_leads l ON l.id=c.supply_lead_id
     WHERE r.id=$1 AND c.id=$2
-    ${lock ? "FOR UPDATE OF r,c,l" : ""}`,[rfqId,candidateId]);
+    ${lock ? "FOR UPDATE OF r,c" : ""}`,[rfqId,candidateId]);
   return rows[0] || null;
 }
 
@@ -126,7 +126,6 @@ export async function selectSupplyCandidate(input:{rfqId:number;candidateId:numb
 }
 
 function buildSupplierEmail(snapshot:Json,recipientName?:string|null) {
-  const rfq = (snapshot.rfq || {}) as Json;
   const candidate = (snapshot.candidate || {}) as Json;
   const request = (snapshot.request || {}) as Json;
   const supplier = (snapshot.supplier || {}) as Json;
@@ -150,7 +149,7 @@ export async function createSupplyOutbox(input:{selectionId:number;recipientEmai
       JOIN market_maker_rfq_candidates c ON c.id=s.candidate_id
       JOIN market_maker_rfqs r ON r.id=s.rfq_id
       LEFT JOIN supply_leads l ON l.id=c.supply_lead_id
-      WHERE s.id=$1 FOR UPDATE OF s,c,r,l`,[input.selectionId]);
+      WHERE s.id=$1 FOR UPDATE OF s,c,r`,[input.selectionId]);
     const selection = rows[0];
     if (!selection) throw Object.assign(new Error("Seleção de supply não encontrada"),{status:404});
     if (selection.status!=="approved") throw Object.assign(new Error("Seleção de supply não está aprovada"),{status:409});
@@ -229,7 +228,7 @@ export async function recordSupplyResponse(input:{selectionId:number;confirmedAv
       FROM supply_outreach_selections s
       JOIN market_maker_rfq_candidates c ON c.id=s.candidate_id
       LEFT JOIN supply_outbox o ON o.selection_id=s.id
-      WHERE s.id=$1 FOR UPDATE OF s,c,o`,[input.selectionId])).rows[0];
+      WHERE s.id=$1 FOR UPDATE OF s,c`,[input.selectionId])).rows[0];
     if (!row) throw Object.assign(new Error("Seleção de supply não encontrada"),{status:404});
     if (row.status!=="approved") throw Object.assign(new Error("Seleção não está ativa"),{status:409});
     const confirmed = Math.max(0,Number(input.confirmedAvailableTonnes.toFixed(3)));
