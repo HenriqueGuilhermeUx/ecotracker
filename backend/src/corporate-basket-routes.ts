@@ -77,19 +77,19 @@ export function registerCorporateBasketRoutes(app: Application) {
     const parsed = z.object({
       sourceCostBrl: z.coerce.number().positive().max(1_000_000_000),
       sourceReference: z.string().min(2).max(500),
-      sourceAvailableKg: z.coerce.number().positive().max(1_000_000_000).nullable().optional(),
+      sourceAvailableKg: z.coerce.number().positive().max(1_000_000_000),
       sourceEvidenceUrl: z.string().url().nullable().optional(),
       quoteTtlMinutes: z.coerce.number().int().min(5).max(1440).default(30),
       confirmedBy: z.string().max(255).nullable().optional(),
     }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Confirmação da leg inválida", details: parsed.error.flatten() });
+    if (!parsed.success) return res.status(400).json({ error: "Confirmação da leg inválida: custo, referência e estoque confirmado são obrigatórios", details: parsed.error.flatten() });
     try {
       const result = await confirmCorporateBasketLeg({
         basketId: Number(one(req.params.basketId)),
         legId: Number(one(req.params.legId)),
         sourceCostBrl: parsed.data.sourceCostBrl,
         sourceReference: parsed.data.sourceReference,
-        sourceAvailableKg: parsed.data.sourceAvailableKg ?? null,
+        sourceAvailableKg: parsed.data.sourceAvailableKg,
         sourceEvidenceUrl: parsed.data.sourceEvidenceUrl ?? null,
         quoteTtlMinutes: parsed.data.quoteTtlMinutes,
         confirmedBy: parsed.data.confirmedBy ?? null,
