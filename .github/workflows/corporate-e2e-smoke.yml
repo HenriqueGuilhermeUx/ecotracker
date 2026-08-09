@@ -1,0 +1,54 @@
+name: EcoTracker Corporate E2E Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'backend/src/corporate-basket*.ts'
+      - 'backend/src/demand-*.ts'
+      - 'backend/src/eligibility-*.ts'
+      - 'backend/scripts/corporate-e2e-smoke.mjs'
+      - '.github/workflows/corporate-e2e-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/corporate-basket*.ts'
+      - 'backend/src/demand-*.ts'
+      - 'backend/src/eligibility-*.ts'
+      - 'backend/scripts/corporate-e2e-smoke.mjs'
+      - '.github/workflows/corporate-e2e-smoke.yml'
+
+jobs:
+  corporate-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_corporate_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_corporate_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Run corporate no-money E2E
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_corporate_e2e
+          NODE_ENV: test
+          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
+          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: node scripts/corporate-e2e-smoke.mjs
