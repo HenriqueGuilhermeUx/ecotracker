@@ -44,6 +44,40 @@ jobs:
           grep -F 'ecotracker-api-cik7.onrender.com/api' frontend/src/api.ts
           grep -F '/api/*' netlify.toml
 
+      - name: Production marketplace smoke check
+        if: github.event_name == 'push'
+        run: |
+          node <<'NODE'
+          const url = 'https://ecotracker10.netlify.app/api/market/catalog/eligibility';
+          let lastError = new Error('Marketplace de produção não validado');
+          for (let attempt = 1; attempt <= 18; attempt += 1) {
+            try {
+              const response = await fetch(url, {
+                headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+              });
+              const contentType = response.headers.get('content-type') || '';
+              if (!contentType.includes('application/json')) {
+                throw new Error(`content-type=${contentType || 'ausente'} status=${response.status}`);
+              }
+              const data = await response.json();
+              if (!response.ok) throw new Error(`status=${response.status} body=${JSON.stringify(data)}`);
+              if (!Array.isArray(data.verifiedCompensation)) {
+                throw new Error('verifiedCompensation ausente no catálogo');
+              }
+              if (data.verifiedCompensation.length < 1) {
+                throw new Error('verifiedCompensation vazio');
+              }
+              console.log(`Marketplace de produção OK: ${data.verifiedCompensation.length} lotes verificados`);
+              process.exit(0);
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error(String(error));
+              console.log(`Tentativa ${attempt}/18: ${lastError.message}`);
+              if (attempt < 18) await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+          }
+          throw lastError;
+          NODE
+
       - name: Mobile install
         working-directory: mobile
         run: npm install --silent
