@@ -14,6 +14,8 @@ import { registerDemandProposalRoutes } from "./demand-proposal-routes.js";
 import { initDemandAutopilotDb } from "./demand-autopilot-db.js";
 import { registerDemandAutopilotRoutes } from "./demand-autopilot-routes.js";
 import { startDemandAutopilotWorker } from "./demand-autopilot.js";
+import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
+import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
@@ -81,6 +83,7 @@ if (!proto.__marketInstalled) {
     registerDemandDeskRoutes(app);
     registerDemandProposalRoutes(app);
     registerDemandAutopilotRoutes(app);
+    registerCommercialOutreachRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
     registerCorporateBasketFulfillmentRoutes(app);
@@ -96,6 +99,7 @@ if (!proto.__marketInstalled) {
       .then(() => initDemandDeskDb())
       .then(() => initDemandProposalDb())
       .then(() => initDemandAutopilotDb())
+      .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
       .then(() => initCorporateBasketFulfillmentDb())

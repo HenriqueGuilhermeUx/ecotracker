@@ -15,6 +15,9 @@ async function proposalView(idColumn: "p.id" | "p.public_code", id: string | num
   const { rows } = await pool.query(`
     SELECT p.*,a.company_name,a.legal_name,a.sector,a.contact_name,a.contact_email,
            o.claim_purpose,o.target_year,o.target_basis,
+           r.status AS review_status,r.snapshot_sha256,r.reviewed_by,r.approved_at,r.rejected_at,
+           ob.id AS outbox_id,ob.status AS outbox_status,ob.recipient_email AS outbox_recipient_email,
+           ob.provider_reference AS outreach_provider_reference,ob.sent_at AS outreach_sent_at,
            COALESCE((SELECT jsonb_agg(jsonb_build_object(
              'id',pi.id,'assetId',pi.asset_id,'registry',pi.registry,'projectName',pi.project_name,'vintage',pi.vintage,
              'amountTonnes',pi.amount_tonnes,'sourcePriceUsdTonne',pi.source_price_usd_tonne,
@@ -25,6 +28,8 @@ async function proposalView(idColumn: "p.id" | "p.public_code", id: string | num
     FROM demand_proposals p
     JOIN demand_accounts a ON a.id=p.account_id
     JOIN demand_opportunities o ON o.id=p.opportunity_id
+    LEFT JOIN demand_proposal_reviews r ON r.proposal_id=p.id
+    LEFT JOIN demand_outbox ob ON ob.proposal_id=p.id
     WHERE ${idColumn}=$1`, [id]);
   return rows[0];
 }
@@ -51,12 +56,21 @@ export function registerDemandProposalRoutes(app: Application) {
       const limit = Math.max(1, Math.min(300, Number(req.query.limit || 100)));
       const { rows } = await pool.query(`
         SELECT p.*,a.company_name,a.sector,a.contact_name,a.contact_email,o.claim_purpose,o.target_year,
+               r.status AS review_status,r.snapshot_sha256,r.reviewed_by,r.approved_at,
+               ob.id AS outbox_id,ob.status AS outbox_status,ob.sent_at AS outreach_sent_at,
                (SELECT COUNT(*) FROM demand_proposal_items pi WHERE pi.proposal_id=p.id)::int AS item_count
         FROM demand_proposals p
         JOIN demand_accounts a ON a.id=p.account_id
         JOIN demand_opportunities o ON o.id=p.opportunity_id
+        LEFT JOIN demand_proposal_reviews r ON r.proposal_id=p.id
+        LEFT JOIN demand_outbox ob ON ob.proposal_id=p.id
         WHERE ($1='' OR p.status=$1)
-        ORDER BY CASE WHEN p.status='draft' THEN 1 WHEN p.status='partial' THEN 2 ELSE 3 END,p.created_at DESC
+        ORDER BY CASE
+          WHEN p.status='draft' AND r.status IS NULL THEN 1
+          WHEN p.status='draft' AND r.status='approved' AND ob.id IS NULL THEN 2
+          WHEN ob.status='ready' THEN 3
+          WHEN p.status='partial' THEN 4
+          ELSE 5 END,p.created_at DESC
         LIMIT $2`, [status,limit]);
       res.setHeader("Cache-Control", "no-store");
       res.json({ count: rows.length, items: rows });
@@ -79,11 +93,22 @@ export function registerDemandProposalRoutes(app: Application) {
   });
 
   app.post("/api/admin/demand/proposals/:id/status", requireAdmin, async (req: Request, res: Response) => {
-    const parsed = z.object({ status: z.enum(["draft","partial","sent","accepted","rejected","expired","converted"]) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Status de proposta inválido" });
+    const parsed = z.object({ status: z.enum(["draft","partial","accepted","rejected","expired","converted"]) }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Status de proposta inválido. O status sent só pode ser produzido pelo dispatch do outbox comercial aprovado.",
+      });
+    }
     try {
+      const current = (await pool.query(`SELECT * FROM demand_proposals WHERE id=$1`,[req.params.id])).rows[0];
+      if (!current) return res.status(404).json({ error: "Proposta não encontrada" });
+      if (parsed.data.status === "accepted" && current.status !== "sent") {
+        return res.status(409).json({ error: "A proposta só pode ser aceita depois de enviada pelo fluxo comercial aprovado" });
+      }
+      if (["draft","partial"].includes(parsed.data.status) && !["draft","partial"].includes(String(current.status))) {
+        return res.status(409).json({ error: "Não é permitido reabrir manualmente uma proposta após avanço comercial" });
+      }
       const { rows } = await pool.query(`UPDATE demand_proposals SET status=$2,updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id,parsed.data.status]);
-      if (!rows[0]) return res.status(404).json({ error: "Proposta não encontrada" });
       res.json(rows[0]);
     } catch (error) { fail(res, error); }
   });
