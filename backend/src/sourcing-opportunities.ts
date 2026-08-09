@@ -6,6 +6,7 @@ type Json = Record<string, unknown>;
 
 export type SourcingOpportunityAction =
   | "complete_x402_execution_rail"
+  | "integrate_gold_standard_commerce_api"
   | "source_newer_vintage"
   | "review_registry_and_vintage"
   | "configure_puro_metadata"
@@ -81,6 +82,7 @@ function providerKey(asset: Asset): string {
   const ref = stringValue(asset.source_reference).toLowerCase();
   if (ref.startsWith("carbonmark-")) return "carbonmark";
   if (ref.startsWith("klima-x402-")) return "klima-x402";
+  if (ref.startsWith("gold-standard-marketplace-")) return "gold-standard";
   if (ref.startsWith("regen-")) return "regen";
   return stringValue(asset.registry, "manual").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "manual";
 }
@@ -97,6 +99,9 @@ function remediation(asset: Asset, blocker: string, flags: string[]): {
   const lower = blocker.toLowerCase();
   if (flags.includes("x402-discovery-only-not-enabled-for-ecotracker-checkout")) {
     return { action: "complete_x402_execution_rail", label: "Concluir e validar a rail de execução x402", priority: 100 };
+  }
+  if (flags.includes("gold-standard-commerce-api-not-integrated")) {
+    return { action: "integrate_gold_standard_commerce_api", label: "Integrar Commerce API do Gold Standard", priority: 97 };
   }
   if (flags.includes("puro-retirement-requires-consumption-metadata-and-whole-tonnes")) {
     return { action: "configure_puro_metadata", label: "Configurar metadata Puro e operação em toneladas inteiras", priority: 92 };
@@ -151,6 +156,9 @@ function policyReviewReady(asset: Asset, flags: string[]): boolean {
     "registry-requires-manual-eligibility-review",
     "vintage-outside-ecotracker-policy",
     "vintage-not-resolved",
+    "gold-standard-vintage-not-resolved",
+    "gold-standard-vintage-selection-not-supported",
+    "gold-standard-commerce-api-not-integrated",
     "puro-retirement-requires-consumption-metadata-and-whole-tonnes",
     "ex-ante-credit-not-allowed-for-automatic-offset",
   ];
