@@ -11,13 +11,27 @@ import { getSourcingOpportunityReport } from "./sourcing-opportunities.js";
 const fail = (res: Response, error: unknown) =>
   res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
 
+function settledProvider<T>(result: PromiseSettledResult<T>, provider: string) {
+  return result.status === "fulfilled"
+    ? { ok: true as const, provider, data: result.value }
+    : { ok: false as const, provider, error: result.reason instanceof Error ? result.reason.message : String(result.reason || "Falha desconhecida") };
+}
+
 async function synchronizeAndRank(forceProviders = false) {
-  const [carbonmark, klimaX402] = await Promise.all([
+  const results = await Promise.allSettled([
     forceProviders ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
     forceProviders ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
   ]);
+  const carbonmark = settledProvider(results[0], "carbonmark");
+  const klimaX402 = settledProvider(results[1], "klima-x402");
   const sourcing = await rankSourcingInventory(forceProviders ? 0 : undefined);
-  return { carbonmark, klimaX402, sourcing };
+  return {
+    carbonmark,
+    klimaX402,
+    providersHealthy: Number(carbonmark.ok) + Number(klimaX402.ok),
+    providersDegraded: Number(!carbonmark.ok) + Number(!klimaX402.ok),
+    sourcing,
+  };
 }
 
 async function listRankedAssets() {
@@ -148,7 +162,7 @@ export function registerSourcingRoutes(app: Application) {
       const result = await synchronizeAndRank(false);
       const channels = await pool.query("SELECT provider_key,provider_name,sourcing_mode,status,min_order_kg,fractional_supported,retirement_supported,beneficiary_retirement_supported,last_checked_at FROM offset_source_channels ORDER BY provider_name");
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...result.sourcing, carbonmark: result.carbonmark, klimaX402: result.klimaX402, channels: channels.rows });
+      res.json({ ...result.sourcing, carbonmark: result.carbonmark, klimaX402: result.klimaX402, providersHealthy: result.providersHealthy, providersDegraded: result.providersDegraded, channels: channels.rows });
     } catch (error) {
       res.status(503).json({ error: error instanceof Error ? error.message : "Sourcing indisponível" });
     }
