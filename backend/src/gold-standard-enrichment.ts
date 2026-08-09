@@ -74,7 +74,9 @@ async function fetchCatalogPages(): Promise<string[]> {
   const results: string[] = [];
   for (let page = 1; page <= pages; page += 1) {
     const suffix = page === 1 ? "" : `?page=${page}`;
-    const response = await fetch(`${baseUrl()}/collections/projects${suffix}`, {
+    // A homepage é o catálogo público que publica explicitamente
+    // "In stock (N units)", LOCATION, VINTAGES e PROJECT TYPE.
+    const response = await fetch(`${baseUrl()}/${suffix}`, {
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "User-Agent": "EcoTracker/1.0 (+https://ecotracker10.netlify.app)",
@@ -92,7 +94,6 @@ async function fetchCatalogPages(): Promise<string[]> {
       break;
     }
     results.push(text);
-    // Shopify frequentemente devolve a última página novamente para páginas além do fim.
     if (results.length > 1 && results[results.length - 1] === results[results.length - 2]) break;
   }
   return results;
@@ -153,17 +154,6 @@ function mergeFlags(current: unknown, next: string[]) {
   return Array.from(new Set([...kept, ...next]));
 }
 
-function monitorDetails(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    } catch { return {}; }
-  }
-  return {};
-}
-
 export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandardEnrichmentResult> {
   const pages = await fetchCatalogPages();
   const { rows } = await pool.query(
@@ -206,9 +196,8 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
       ...(!hasEvidence ? ["gold-standard-registry-project-link-not-resolved"] : []),
     ];
     const riskFlags = mergeFlags(asset.eligibility_risk_flags, nextFlags);
-    const currentDetails = monitorDetails(asset.monitor_details);
     const enrichment = {
-      source: `${baseUrl()}/collections/projects`,
+      source: `${baseUrl()}/`,
       stockTonnes: stock,
       vintages,
       oldestVintage: oldest,
