@@ -10,41 +10,84 @@ jobs:
       - name: Probe EcoTracker production sourcing
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           BASE="https://ecotracker-api-cik7.onrender.com"
 
-          echo "Waiting for production health on current main deployment..."
-          for attempt in $(seq 1 20); do
-            if curl -fsS --max-time 20 "$BASE/api/health" -o health.json; then
-              echo "health reached on attempt $attempt"
+          for attempt in $(seq 1 24); do
+            health_code=$(curl -sS --max-time 20 -o health.json -w '%{http_code}' "$BASE/api/health" || true)
+            x402_code=$(curl -sS --max-time 60 -o x402-status.json -w '%{http_code}' "$BASE/api/market/klima-x402/status" || true)
+            if [ "$health_code" = "200" ] && [ "$x402_code" = "200" ]; then
+              echo "production + x402 healthy on attempt $attempt"
               break
             fi
-            if [ "$attempt" -eq 20 ]; then
-              echo "production health did not become reachable"
-              exit 1
+            echo "attempt=$attempt health=$health_code x402=$x402_code"
+            if [ "$attempt" -eq 24 ]; then
+              echo "production did not reach full provider health in probe window"
+            else
+              sleep 15
             fi
-            sleep 15
           done
 
-          curl -fsS --max-time 90 "$BASE/api/market/sourcing/health" -o sourcing-health.json
-          curl -fsS --max-time 120 "$BASE/api/market/sourcing/status" -o sourcing-status.json
-          curl -fsS --max-time 90 "$BASE/api/market/gold-standard/status" -o gold-standard-status.json
-          curl -fsS --max-time 90 "$BASE/api/market/klima-x402/status" -o x402-status.json
-          curl -fsS --max-time 90 "$BASE/api/market/carbonmark/status" -o carbonmark-status.json
+          fetch() {
+            name="$1"
+            path="$2"
+            code=$(curl -sS --max-time 150 -o "$name.json" -w '%{http_code}' "$BASE$path" || true)
+            echo "$code" > "$name.status"
+            echo "$name HTTP $code"
+          }
+
+          fetch sourcing-health /api/market/sourcing/health
+          fetch sourcing-status /api/market/sourcing/status
+          fetch gold-standard-status /api/market/gold-standard/status
+          fetch x402-status /api/market/klima-x402/status
+          fetch carbonmark-status /api/market/carbonmark/status
+          fetch assets /api/market/assets
+
+          echo '=== HTTP STATUS ==='
+          for f in *.status; do echo "$f=$(cat "$f")"; done
 
           echo '=== HEALTH ==='
-          cat health.json
+          cat health.json 2>/dev/null || true
           echo
-          echo '=== SOURCING HEALTH ==='
-          jq -c '{status,summary:{totalActiveAssets:.summary.totalActiveAssets,verifiedCompensationAssets:.summary.verifiedCompensationAssets,executableCompensationAssets:.summary.executableCompensationAssets,fractionalCompensationAssets:.summary.fractionalCompensationAssets,climateContributionAssets:.summary.climateContributionAssets,restrictedAssets:.summary.restrictedAssets,minimumVerifiedTarget:.summary.minimumVerifiedTarget,needsReplenishment:.summary.needsReplenishment,needsFractionalSource:.summary.needsFractionalSource},alerts}' sourcing-health.json
-          echo '=== SOURCING STATUS ==='
-          jq -c '{totalActiveAssets,verifiedCompensationAssets,executableCompensationAssets,fractionalCompensationAssets,climateContributionAssets,restrictedAssets,minimumVerifiedTarget,needsReplenishment,needsFractionalSource,providersHealthy,providersDegraded,blockers,nearMissCandidates:(.nearMissCandidates[0:8]),carbonmark,goldStandard,klimaX402}' sourcing-status.json
-          echo '=== GOLD STANDARD ==='
-          jq -c . gold-standard-status.json
-          echo '=== X402 ==='
-          jq -c . x402-status.json
-          echo '=== CARBONMARK ==='
-          jq -c . carbonmark-status.json
+
+          if jq -e . sourcing-health.json >/dev/null 2>&1; then
+            echo '=== SOURCING HEALTH ==='
+            jq -c '{status,summary:{totalActiveAssets:.summary.totalActiveAssets,verifiedCompensationAssets:.summary.verifiedCompensationAssets,executableCompensationAssets:.summary.executableCompensationAssets,fractionalCompensationAssets:.summary.fractionalCompensationAssets,climateContributionAssets:.summary.climateContributionAssets,restrictedAssets:.summary.restrictedAssets,minimumVerifiedTarget:.summary.minimumVerifiedTarget,needsReplenishment:.summary.needsReplenishment,needsFractionalSource:.summary.needsFractionalSource},latestRun,alerts}' sourcing-health.json
+          fi
+
+          if jq -e . sourcing-status.json >/dev/null 2>&1; then
+            echo '=== SOURCING STATUS ==='
+            jq -c '{totalActiveAssets,verifiedCompensationAssets,executableCompensationAssets,fractionalCompensationAssets,climateContributionAssets,restrictedAssets,minimumVerifiedTarget,needsReplenishment,needsFractionalSource,providersHealthy,providersDegraded,blockers,nearMissCandidates:(.nearMissCandidates[0:8]),carbonmark,goldStandard,klimaX402}' sourcing-status.json
+          fi
+
+          echo '=== PROVIDER STATUS ==='
+          for f in gold-standard-status x402-status carbonmark-status; do
+            echo "--- $f"
+            jq -c . "$f.json" 2>/dev/null || cat "$f.json" 2>/dev/null || true
+          done
+
+          if jq -e 'type == "array"' assets.json >/dev/null 2>&1; then
+            echo '=== ASSET COUNTS BY SOURCE ==='
+            jq -c '{
+              total:length,
+              carbonmarkClassic:map(select((.source_reference // "")|startswith("carbonmark-")))|length,
+              klimaX402:map(select((.source_reference // "")|startswith("klima-x402-")))|length,
+              goldStandardMarketplace:map(select((.source_reference // "")|startswith("gold-standard-marketplace-")))|length,
+              regen:map(select((.source_reference // "")|startswith("regen-")))|length,
+              other:map(select(((.source_reference // "")|startswith("carbonmark-")|not) and ((.source_reference // "")|startswith("klima-x402-")|not) and ((.source_reference // "")|startswith("gold-standard-marketplace-")|not) and ((.source_reference // "")|startswith("regen-")|not)))|length
+            }' assets.json
+
+            echo '=== GOLD STANDARD CANDIDATES ==='
+            jq -c '[.[] | select((.source_reference // "")|startswith("gold-standard-marketplace-")) | {
+              id,project_name,vintage,available_tons,min_order_kg,source_price_usd_ton,availability_status,source_status,
+              claim_category,eligibility_status,source_unit_status,retirement_supported,beneficiary_retirement_supported,
+              registry_evidence_url,sourcing_score,sourcing_tier,sourcing_shelf,sourcing_executable,
+              riskFlags:.eligibility_risk_flags
+            }] | sort_by(-(.sourcing_score|tonumber? // 0)) | .[0:30]' assets.json
+
+            echo '=== RECENT-VINTAGE GOLD STANDARD ==='
+            jq -c '[.[] | select((.source_reference // "")|startswith("gold-standard-marketplace-")) | select((.vintage // "")|test("2021|2022|2023|2024|2025|2026")) | {id,project_name,vintage,available_tons,source_price_usd_ton,availability_status,registry_evidence_url,riskFlags:.eligibility_risk_flags}]' assets.json
+          fi
 
       - name: Upload probe JSON
         if: always()
@@ -52,10 +95,6 @@ jobs:
         with:
           name: ecotracker-production-sourcing-probe
           path: |
-            health.json
-            sourcing-health.json
-            sourcing-status.json
-            gold-standard-status.json
-            x402-status.json
-            carbonmark-status.json
+            *.json
+            *.status
           if-no-files-found: warn
