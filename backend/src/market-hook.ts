@@ -18,6 +18,7 @@ import { registerKlimaX402Routes } from "./klima-x402-routes.js";
 import { refreshKlimaX402IfStale } from "./klima-x402.js";
 import { registerMarketRoutes } from "./market-routes.js";
 import { registerPrivacyRoutes } from "./privacy-routes.js";
+import { registerPuroSupplyScoutRoutes } from "./puro-supply-scout.js";
 import { registerSourcingRoutes } from "./sourcing-routes.js";
 import { registerSourcingAutopilotRoutes } from "./sourcing-autopilot-routes.js";
 import { initSourcingAutopilotDb, startSourcingAutopilot } from "./sourcing-autopilot.js";
@@ -59,6 +60,7 @@ if (!proto.__marketInstalled) {
     registerAssistedQuoteRoutes(app);
     registerAssistedSourcingOpsRoutes(app);
     registerSupplyDeskRoutes(app);
+    registerPuroSupplyScoutRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
 
