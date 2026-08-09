@@ -1,0 +1,97 @@
+name: EcoTracker Basket Fulfillment DB Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'backend/src/corporate-basket-fulfillment*.ts'
+      - 'backend/src/corporate-basket*.ts'
+      - '.github/workflows/basket-fulfillment-db-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/corporate-basket-fulfillment*.ts'
+      - 'backend/src/corporate-basket*.ts'
+      - '.github/workflows/basket-fulfillment-db-smoke.yml'
+
+jobs:
+  fulfillment-db-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_fulfillment_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_fulfillment_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Initialize basket fulfillment schema
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_fulfillment_ci
+          NODE_ENV: test
+          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
+          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
+        run: |
+          node --input-type=module <<'NODE'
+          import { initDb, pool } from './dist/db.js';
+          import { initMarketDb } from './dist/market-db.js';
+          import { initEligibilityDb } from './dist/eligibility-db.js';
+          import { initCommerceDb } from './dist/commerce-db.js';
+          import { initAssistedSourcingDb } from './dist/assisted-sourcing-db.js';
+          import { initSupplyDeskDb } from './dist/supply-desk-db.js';
+          import { initDemandDeskDb } from './dist/demand-desk-db.js';
+          import { initDemandProposalDb } from './dist/demand-proposal-db.js';
+          import { initCorporateBasketDb } from './dist/corporate-basket-db.js';
+          import { initCorporateBasketPaymentDb, corporateBasketPaymentStatus } from './dist/corporate-basket-payment-db.js';
+          import { initCorporateBasketFulfillmentDb } from './dist/corporate-basket-fulfillment-db.js';
+          try {
+            await initDb();
+            await initMarketDb();
+            await initEligibilityDb();
+            await initCommerceDb();
+            await initAssistedSourcingDb();
+            await initSupplyDeskDb();
+            await initDemandDeskDb();
+            await initDemandProposalDb();
+            await initCorporateBasketDb();
+            await initCorporateBasketPaymentDb();
+            await initCorporateBasketFulfillmentDb();
+
+            const payment = await corporateBasketPaymentStatus();
+            if (payment.live) throw new Error('Basket Payment não pode ficar live no CI');
+
+            const tables = await pool.query(`
+              SELECT tablename FROM pg_tables
+              WHERE schemaname='public' AND tablename IN (
+                'corporate_basket_fulfillments',
+                'corporate_basket_fulfillment_legs',
+                'corporate_basket_ecot_allocations',
+                'corporate_basket_documents'
+              ) ORDER BY tablename
+            `);
+            if (tables.rows.length !== 4) throw new Error(`Tabelas de fulfillment ausentes: ${JSON.stringify(tables.rows)}`);
+
+            const trigger = await pool.query(`
+              SELECT tgname FROM pg_trigger
+              WHERE NOT tgisinternal AND tgname='guard_fulfillment_leg_volume'
+            `);
+            if (trigger.rows.length !== 1) throw new Error('Trigger guard_fulfillment_leg_volume ausente');
+            console.log('Basket Fulfillment DB smoke OK', { tables: tables.rows.map(r => r.tablename), paymentLive: payment.live });
+          } finally {
+            await pool.end();
+          }
+          NODE
