@@ -66,6 +66,8 @@ services:
         value: "168"
       - key: ECOT_MIN_VERIFIED_OFFSET_ASSETS
         value: "5"
+      - key: ECOT_SOURCING_RANK_MAX_AGE_MS
+        value: "60000"
       - key: REGEN_PUBLISHED_ORDER_LIMIT
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
