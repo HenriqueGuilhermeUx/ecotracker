@@ -4,10 +4,13 @@ import { initCommerceDb } from "./commerce-db.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
+import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
+import { registerGoldStandardRoutes } from "./gold-standard-routes.js";
+import { refreshGoldStandardIfStale } from "./gold-standard-marketplace.js";
 import { registerKlimaX402Routes } from "./klima-x402-routes.js";
 import { refreshKlimaX402IfStale } from "./klima-x402.js";
 import { registerMarketRoutes } from "./market-routes.js";
@@ -42,15 +45,19 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
-    // Carbonmark clássico é registrado primeiro: sincroniza o catálogo e trava o custo real da fonte.
+    // Carbonmark clássico é executável quando o quote real da fonte é travado.
     registerCarbonmarkRoutes(app);
-    // x402 amplia o discovery sem chave, mas permanece read-only e bloqueia checkout nesta fase.
+    // x402 amplia discovery sem chave; execução financeira permanece bloqueada.
     registerKlimaX402Routes(app);
+    // Gold Standard acrescenta ofertas comerciais reais; checkout continua assistido.
+    registerGoldStandardRoutes(app);
     // Sourcing e Autopilot ficam depois dos provedores e antes das rotas genéricas.
     registerSourcingRoutes(app);
     registerSourcingAutopilotRoutes(app);
-    // A trava de elegibilidade continua protegendo todas as fontes e todas as cotações.
+    // Toda cotação passa primeiro pela política de elegibilidade.
     registerEligibilityRoutes(app);
+    // Fontes quote/indicative/manual podem registrar demanda, nunca cobrança automática.
+    registerAssistedQuoteRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
     // quote_requests nasce em initMarketDb; a elegibilidade adiciona campos/snapshot;
@@ -62,8 +69,16 @@ if (!proto.__marketInstalled) {
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
         // Nenhum provedor impede o boot se estiver temporariamente indisponível.
-        await refreshCarbonmarkIfStale(0).catch((error) => console.warn("[carbonmark] initial refresh failed", error));
-        await refreshKlimaX402IfStale(0).catch((error) => console.warn("[klima-x402] initial refresh failed", error));
+        await Promise.allSettled([
+          refreshCarbonmarkIfStale(0),
+          refreshKlimaX402IfStale(0),
+          refreshGoldStandardIfStale(0),
+        ]).then((results) => {
+          const names = ["carbonmark", "klima-x402", "gold-standard"];
+          results.forEach((result, index) => {
+            if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason);
+          });
+        });
         await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
         startSourcingAutopilot();
         startCommerceWorker();
