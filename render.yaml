@@ -74,6 +74,8 @@ services:
         value: "600000"
       - key: ECOT_SOURCING_REPLENISH_MIN_INTERVAL_MS
         value: "900000"
+      - key: ECOT_SOURCING_RUN_RETENTION_DAYS
+        value: "30"
       - key: REGEN_PUBLISHED_ORDER_LIMIT
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
