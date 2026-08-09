@@ -72,8 +72,8 @@ async function refreshFulfillmentTotals(client: pg.PoolClient, fulfillmentId: nu
     status = "in_progress";
   }
   await client.query(`
-    UPDATE corporate_basket_fulfillments SET total_acquired_kg=$2,total_retired_kg=$3,status=$4,
-      retired_at=CASE WHEN $4='retired' THEN COALESCE(retired_at,NOW()) ELSE retired_at END,
+    UPDATE corporate_basket_fulfillments SET total_acquired_kg=$2,total_retired_kg=$3,status=$4::varchar(40),
+      retired_at=CASE WHEN $4::varchar(40)='retired' THEN COALESCE(retired_at,NOW()) ELSE retired_at END,
       review_reason=$5,updated_at=NOW()
     WHERE id=$1`, [fulfillmentId,acquired,retired,status,reviewReason]);
   return { acquired,retired,status };

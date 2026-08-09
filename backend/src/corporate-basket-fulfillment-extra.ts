@@ -46,9 +46,9 @@ export async function resolveCorporateBasketFulfillmentLegReview(input:{basketId
 
     await client.query(`
       UPDATE corporate_basket_fulfillments
-      SET total_acquired_kg=$2,total_retired_kg=$3,status=$4,
-          review_reason=CASE WHEN $4='review_required' THEN 'Uma ou mais legs exigem revisão operacional' ELSE NULL END,
-          retired_at=CASE WHEN $4='retired' THEN COALESCE(retired_at,NOW()) ELSE retired_at END,
+      SET total_acquired_kg=$2,total_retired_kg=$3,status=$4::varchar(40),
+          review_reason=CASE WHEN $4::varchar(40)='review_required' THEN 'Uma ou mais legs exigem revisão operacional' ELSE NULL END,
+          retired_at=CASE WHEN $4::varchar(40)='retired' THEN COALESCE(retired_at,NOW()) ELSE retired_at END,
           updated_at=NOW()
       WHERE id=$1`, [leg.parent_fulfillment_id,Number(row.acquired_kg || 0),retired,fulfillmentStatus]);
 
