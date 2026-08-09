@@ -1,6 +1,7 @@
 import { pool, withTransaction } from "./db.js";
 import { generateDemandMatches } from "./demand-matching.js";
 import { createDemandProposal } from "./demand-proposal.js";
+import { resolveDemandSupplyRfq, upsertDemandSupplyRfq } from "./demand-supply-rfq.js";
 
 type Json = Record<string, unknown>;
 
@@ -78,6 +79,8 @@ export async function demandAutopilotStatus() {
     behavior:{
       createsInternalOpportunities:true,
       createsDraftProposals:true,
+      createsSupplyRfqsForCoverageGaps:true,
+      resolvesSupplyRfqsWhenClaimReadyCoverageArrives:true,
       sendsOutreach:false,
       opensCheckout:false,
       chargesMoney:false,
@@ -248,8 +251,10 @@ export async function runDemandAutopilot(input:{triggerMode?:"manual"|"worker";f
       uncoveredTonnesTotal += uncovered;
 
       let proposal:Json | null = existingProposal.rows[0] || null;
+      let rfq:Json | null = null;
       if (matching.fullyCovered) {
         fullyCovered += 1;
+        await resolveDemandSupplyRfq(Number(materialized.opportunity.id),covered);
         if (!proposal) {
           proposal = await createDemandProposal({
             opportunityId:Number(materialized.opportunity.id),
@@ -269,6 +274,13 @@ export async function runDemandAutopilot(input:{triggerMode?:"manual"|"worker";f
             coveragePct:num(matching.coveragePct),sourcingRequired:true,
           }),
         ]);
+        rfq = await upsertDemandSupplyRfq({
+          opportunityId:Number(materialized.opportunity.id),
+          targetTonnes:materialized.targetTonnes,
+          coveredTonnes:covered,
+          gapTonnes:uncovered,
+          source:"demand_autopilot",
+        }) as Json | null;
       }
 
       items.push({
@@ -277,6 +289,7 @@ export async function runDemandAutopilot(input:{triggerMode?:"manual"|"worker";f
         opportunityId:Number(materialized.opportunity.id),opportunityCreated:materialized.created,
         coveredTonnes:covered,uncoveredTonnes:uncovered,coveragePct:num(matching.coveragePct),fullyCovered:Boolean(matching.fullyCovered),
         proposalId:proposal ? Number(proposal.id) : null,proposalMode:proposal ? proposal.checkout_mode : null,
+        rfqId:rfq ? Number(rfq.id) : null,rfqStatus:rfq ? rfq.status : matching.fullyCovered ? "resolved_or_not_needed" : null,
         nextAction:matching.fullyCovered ? "commercial_review" : "source_more_credits",
       });
     } catch (error) {
