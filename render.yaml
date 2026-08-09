@@ -76,6 +76,8 @@ services:
         value: "900000"
       - key: ECOT_SOURCING_RUN_RETENTION_DAYS
         value: "30"
+      - key: ECOT_DEMAND_AUTOPILOT_ENABLED
+        value: "false"
       - key: REGEN_PUBLISHED_ORDER_LIMIT
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
