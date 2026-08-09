@@ -25,10 +25,20 @@ function automaticGenericSource(asset: Record<string, unknown>) {
     && availableTons > 0;
 }
 
+function providerKey(asset: Record<string, unknown>) {
+  const details = asset.monitor_details && typeof asset.monitor_details === "object" && !Array.isArray(asset.monitor_details)
+    ? asset.monitor_details as Record<string, unknown>
+    : {};
+  const explicit = String(details.providerKey || "").trim();
+  if (explicit) return explicit;
+  const sourceReference = String(asset.source_reference || "").toLowerCase();
+  if (sourceReference.startsWith("gold-standard-marketplace-")) return "gold-standard";
+  if (sourceReference.startsWith("klima-x402-")) return "klima-x402";
+  if (sourceReference.startsWith("carbonmark-")) return "carbonmark";
+  return String(asset.registry || "assisted").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "assisted";
+}
+
 export function registerAssistedQuoteRoutes(app: Application) {
-  // Registrada depois da trava de elegibilidade e antes da rota genérica.
-  // Fontes sem execução/preço/estoque confirmados podem gerar uma solicitação,
-  // mas nunca recebem final_total nem status quoted automaticamente.
   app.post("/api/market/quotes", async (req: Request, res: Response, next: NextFunction) => {
     const parsed = quoteSchema.safeParse(req.body);
     if (!parsed.success) return next();
@@ -65,6 +75,7 @@ export function registerAssistedQuoteRoutes(app: Application) {
         });
       }
 
+      const sourceProvider = providerKey(asset);
       const snapshot = {
         pricingMode: "assisted",
         reason: String(asset.pricing_mode || "quote") !== "dynamic"
@@ -74,6 +85,7 @@ export function registerAssistedQuoteRoutes(app: Application) {
             : String(asset.source_status || "") !== "connected"
               ? "source_not_connected"
               : "monitored_volume_not_confirmed",
+        sourceProvider,
         sourceReference: asset.source_reference,
         sourceStatus: asset.source_status,
         availabilityStatus: asset.availability_status,
@@ -86,9 +98,9 @@ export function registerAssistedQuoteRoutes(app: Application) {
       const created = await pool.query(`
         INSERT INTO quote_requests
           (asset_id,buyer_name,buyer_email,buyer_phone,company_name,tax_id,requested_kg,delivery_mode,wallet_address,purpose,
-           status,pricing_snapshot)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'requested',$11::jsonb)
-        RETURNING public_code,status,requested_kg,created_at`,
+           status,pricing_snapshot,automation_enabled,sourcing_status,sourcing_provider)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'requested',$11::jsonb,FALSE,'manual_quote_pending',$12)
+        RETURNING public_code,status,requested_kg,automation_enabled,sourcing_status,sourcing_provider,created_at`,
       [
         asset.id,
         parsed.data.buyerName,
@@ -101,12 +113,15 @@ export function registerAssistedQuoteRoutes(app: Application) {
         parsed.data.deliveryMode === "wallet" ? parsed.data.walletAddress || null : null,
         decision.purpose,
         JSON.stringify(snapshot),
+        sourceProvider,
       ]);
 
       return res.status(201).json({
         ...created.rows[0],
         checkoutReady: false,
         pricingMode: "assisted",
+        automationEnabled: false,
+        nextAction: "confirm_source_quote",
         asset: {
           id: asset.id,
           registry: asset.registry,
