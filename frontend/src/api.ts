@@ -1,12 +1,20 @@
 const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+const PRODUCTION_API_URL = "https://ecotracker-api-cik7.onrender.com/api";
 
-// Em produção, todas as chamadas passam pelo mesmo domínio Netlify em /api.
-// VITE_API_URL fica restrito ao desenvolvimento local para evitar apontamentos antigos.
+// Em produção, tentamos primeiro o proxy same-origin do Netlify.
+// Se um deploy antigo devolver o index.html em /api/*, fazemos fallback
+// direto para o Render. Isso evita esconder o catálogo real enquanto o
+// redirect do Netlify ainda não propagou.
 export const API_URL = (
   isLocal
     ? (import.meta.env.VITE_API_URL || "http://localhost:4000/api")
     : "/api"
 ).replace(/\/$/, "");
+
+function candidateBases() {
+  if (isLocal) return [API_URL];
+  return [API_URL, PRODUCTION_API_URL];
+}
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem("ecotracker_admin_token");
@@ -15,34 +23,50 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   headers.set("Accept", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 30000);
+  let lastError: unknown = null;
 
-  try {
-    const response = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers,
-      signal: options.signal || controller.signal,
-      cache: "no-store",
-    });
+  for (const base of candidateBases()) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
 
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      throw new Error(`A rota ${API_URL}${path} não retornou JSON. O proxy da API ainda não foi aplicado neste deploy.`);
-    }
+    try {
+      const response = await fetch(`${base}${path}`, {
+        ...options,
+        headers,
+        signal: options.signal || controller.signal,
+        cache: "no-store",
+      });
 
-    const data = await response.json() as { error?: string } | T;
-    if (!response.ok) {
-      const errorMessage = typeof data === "object" && data && "error" in data ? data.error : null;
-      throw new Error(errorMessage || `Falha na operação (${response.status})`);
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        lastError = new Error(`A rota ${base}${path} não retornou JSON.`);
+        // Em produção, HTML no proxy geralmente significa que o redirect ainda
+        // não foi aplicado. Tenta a API pública diretamente antes de falhar.
+        if (!isLocal && base === API_URL) continue;
+        throw lastError;
+      }
+
+      const data = await response.json() as { error?: string } | T;
+      if (!response.ok) {
+        const errorMessage = typeof data === "object" && data && "error" in data ? data.error : null;
+        throw new Error(errorMessage || `Falha na operação (${response.status})`);
+      }
+      return data as T;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        lastError = new Error("A API está acordando ou demorou para responder.");
+      }
+      // Falha de rede/CORS do proxy: em produção ainda tentamos o Render direto.
+      if (!isLocal && base === API_URL) continue;
+      throw lastError;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return data as T;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("A API está acordando ou demorou para responder. Tente atualizar novamente em alguns segundos.");
-    }
-    throw error;
-  } finally {
-    window.clearTimeout(timeout);
   }
+
+  if (lastError instanceof Error) {
+    throw new Error(`${lastError.message} Não foi possível alcançar o backend do EcoTracker.`);
+  }
+  throw new Error("Não foi possível alcançar o backend do EcoTracker.");
 }
