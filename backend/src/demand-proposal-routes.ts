@@ -83,7 +83,9 @@ export function registerDemandProposalRoutes(app: Application) {
 
   app.get("/api/demand/proposals/:publicCode", async (req: Request, res: Response) => {
     try {
-      const proposal = await proposalView("p.public_code", req.params.publicCode);
+      const raw = req.params.publicCode;
+      const publicCode = Array.isArray(raw) ? raw[0] : raw;
+      const proposal = await proposalView("p.public_code", publicCode);
       if (!proposal) return res.status(404).json({ error: "Proposta não encontrada" });
       if (proposal.expires_at && new Date(proposal.expires_at).getTime() < Date.now() && !["accepted","converted"].includes(String(proposal.status))) {
         return res.status(410).json({ error: "Esta proposta expirou" });
