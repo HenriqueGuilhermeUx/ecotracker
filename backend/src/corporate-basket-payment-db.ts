@@ -85,7 +85,7 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
           SELECT EXISTS(
             SELECT 1 FROM corporate_basket_payment_attempts p
             WHERE p.basket_id=NEW.id
-              AND p.status IN ('creating','pending','active','approved','paid','amount_mismatch','review_required')
+              AND p.status IN ('creating','pending','active','approved_reconciling','approved','paid','amount_mismatch','review_required')
           ) INTO reconcilable;
           IF COALESCE(reconcilable,FALSE)=FALSE THEN
             RAISE EXCEPTION 'Corporate basket payment rail is not enabled in this deployment';
@@ -108,16 +108,25 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
       confirmed_capacity_kg NUMERIC;
       effective_capacity_kg NUMERIC;
       already_reserved_kg NUMERIC;
+      payment_reconcilable BOOLEAN;
     BEGIN
-      -- A transição active -> committed acontece somente depois de um pagamento
-      -- reconciliado. A capacidade já foi validada antes de abrir o checkout;
-      -- nunca rejeitamos a reconciliação de dinheiro capturado por drift posterior.
+      -- Pagamento pode ser notificado alguns segundos depois do TTL. A capacidade
+      -- já foi validada antes do checkout; durante reconciliação, preservar o lock
+      -- é mais seguro que rejeitar dinheiro já capturado por drift posterior.
       IF TG_OP='UPDATE'
-         AND OLD.status='active'
+         AND OLD.status IN ('active','expired')
          AND NEW.status='committed'
          AND OLD.asset_id=NEW.asset_id
          AND OLD.reserved_kg=NEW.reserved_kg THEN
-        RETURN NEW;
+        SELECT EXISTS(
+          SELECT 1 FROM corporate_basket_payment_attempts p
+          WHERE p.basket_id=NEW.basket_id
+            AND p.status IN ('approved_reconciling','amount_mismatch','paid')
+            AND p.expires_at >= NOW() - INTERVAL '5 minutes'
+        ) INTO payment_reconcilable;
+        IF COALESCE(payment_reconcilable,FALSE)=TRUE THEN
+          RETURN NEW;
+        END IF;
       END IF;
 
       IF NEW.status NOT IN ('active','committed') THEN
