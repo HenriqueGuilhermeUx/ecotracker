@@ -20,6 +20,7 @@ import { registerSourcingRoutes } from "./sourcing-routes.js";
 import { registerSourcingAutopilotRoutes } from "./sourcing-autopilot-routes.js";
 import { initSourcingAutopilotDb, startSourcingAutopilot } from "./sourcing-autopilot.js";
 import { rankSourcingInventory } from "./sourcing-engine.js";
+import { enrichX402CfcIfStale, startX402CfcEnrichmentWorker } from "./x402-cfc-enrichment.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
 const proto = express.application as unknown as {
@@ -48,7 +49,7 @@ if (!proto.__marketInstalled) {
     registerPrivacyRoutes(app);
     // Carbonmark clássico é executável quando o quote real da fonte é travado.
     registerCarbonmarkRoutes(app);
-    // x402 amplia discovery sem chave; execução financeira permanece bloqueada.
+    // x402 amplia discovery; CFC preservation pode virar compensação assistida/fracionária.
     registerKlimaX402Routes(app);
     // Gold Standard acrescenta ofertas comerciais reais; checkout continua assistido.
     registerGoldStandardRoutes(app);
@@ -80,11 +81,20 @@ if (!proto.__marketInstalled) {
             if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason);
           });
         });
-        // Enriquecimento usa o catálogo oficial para estoque/vintages e precisa rodar
-        // antes do primeiro ranking, senão ofertas Gold Standard assistidas ficariam restritas.
-        await enrichGoldStandardIfStale(0).catch((error) => console.warn("[gold-standard] initial enrichment failed", error));
+        // Enriquecimentos rodam antes do primeiro ranking para que o shelf reflita
+        // o estado verificável mais recente de cada registry/provider.
+        await Promise.allSettled([
+          enrichGoldStandardIfStale(0),
+          enrichX402CfcIfStale(0),
+        ]).then((results) => {
+          const names = ["gold-standard", "x402-cfc"];
+          results.forEach((result, index) => {
+            if (result.status === "rejected") console.warn(`[${names[index]}] initial enrichment failed`, result.reason);
+          });
+        });
         await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
         startGoldStandardEnrichmentWorker();
+        startX402CfcEnrichmentWorker();
         startSourcingAutopilot();
         startCommerceWorker();
         return original.apply(this, args);

@@ -5,6 +5,7 @@ import { refreshGoldStandardIfStale, refreshGoldStandardMarketplace } from "./go
 import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
 import { getSourcingOpportunityReport } from "./sourcing-opportunities.js";
+import { enrichX402CfcIfStale } from "./x402-cfc-enrichment.js";
 
 type Trigger = "boot" | "interval" | "manual" | "replenishment";
 type ProviderResult = { ok: boolean; provider: string; data?: unknown; error?: string };
@@ -41,16 +42,22 @@ function settledProvider<T>(result: PromiseSettledResult<T>, provider: string): 
 
 async function refreshGoldStandardProvider(force: boolean) {
   const market = force ? await refreshGoldStandardMarketplace() : await refreshGoldStandardIfStale();
-  // O coletor base reseta o estado comercial para screening; o enriquecimento deve
-  // rodar no mesmo provider-cycle antes de qualquer ranking/autopilot snapshot.
   const enrichment = await enrichGoldStandardIfStale(force ? 0 : 10 * 60 * 1000);
   return { market, enrichment };
+}
+
+async function refreshX402Provider(force: boolean) {
+  const market = force ? await refreshKlimaX402Assets() : await refreshKlimaX402IfStale();
+  // O discovery base mantém REGEN restrito por padrão. O CFC enrichment revalida
+  // apenas os preservation credits conhecidos antes de qualquer ranking.
+  const cfcEnrichment = await enrichX402CfcIfStale(force ? 0 : 5 * 60 * 1000);
+  return { market, cfcEnrichment };
 }
 
 async function refreshProviders(force: boolean): Promise<ProviderResult[]> {
   const results = await Promise.allSettled([
     force ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
-    force ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
+    refreshX402Provider(force),
     refreshGoldStandardProvider(force),
   ]);
   return [
