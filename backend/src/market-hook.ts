@@ -4,6 +4,8 @@ import { initCommerceDb } from "./commerce-db.js";
 import { initCorporateBasketDb } from "./corporate-basket-db.js";
 import { initCorporateBasketPaymentDb } from "./corporate-basket-payment-db.js";
 import { registerCorporateBasketPaymentRoutes, registerCorporateBasketPaymentWebhookRoutes } from "./corporate-basket-payment-routes.js";
+import { initCorporateBasketFulfillmentDb } from "./corporate-basket-fulfillment-db.js";
+import { registerCorporateBasketFulfillmentRoutes } from "./corporate-basket-fulfillment-routes.js";
 import { registerCorporateBasketRoutes } from "./corporate-basket-routes.js";
 import { initDemandDeskDb } from "./demand-desk-db.js";
 import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
@@ -77,6 +79,7 @@ if (!proto.__marketInstalled) {
     registerDemandProposalRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
+    registerCorporateBasketFulfillmentRoutes(app);
     registerCorporateBasketRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
@@ -90,6 +93,7 @@ if (!proto.__marketInstalled) {
       .then(() => initDemandProposalDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
+      .then(() => initCorporateBasketFulfillmentDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
