@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import LegacyApp from "./App";
+import { CarbonDesk } from "./CarbonDesk";
 import { MarketCatalog } from "./MarketCatalog";
 import { MarketAdmin } from "./MarketAdmin";
 import "./market.css";
@@ -17,5 +18,6 @@ export default function MarketApp() {
 
   if (page === "marketplace") return <MarketCatalog />;
   if (page === "market-admin") return <MarketAdmin />;
+  if (page === "carbon-desk") return <CarbonDesk />;
   return <LegacyApp />;
 }
