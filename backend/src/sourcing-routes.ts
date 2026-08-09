@@ -3,6 +3,7 @@ import { requireAdmin } from "./auth.js";
 import { refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
+import { enrichGoldStandardIfStale } from "./gold-standard-enrichment.js";
 import { refreshGoldStandardIfStale, refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { assetProjection } from "./market-db.js";
@@ -18,11 +19,17 @@ function settledProvider<T>(result: PromiseSettledResult<T>, provider: string) {
     : { ok: false as const, provider, error: result.reason instanceof Error ? result.reason.message : String(result.reason || "Falha desconhecida") };
 }
 
+async function refreshGoldStandardProvider(force: boolean) {
+  const market = force ? await refreshGoldStandardMarketplace() : await refreshGoldStandardIfStale();
+  const enrichment = await enrichGoldStandardIfStale(force ? 0 : 10 * 60 * 1000);
+  return { market, enrichment };
+}
+
 async function synchronizeAndRank(forceProviders = false) {
   const results = await Promise.allSettled([
     forceProviders ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
     forceProviders ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
-    forceProviders ? refreshGoldStandardMarketplace() : refreshGoldStandardIfStale(),
+    refreshGoldStandardProvider(forceProviders),
   ]);
   const carbonmark = settledProvider(results[0], "carbonmark");
   const klimaX402 = settledProvider(results[1], "klima-x402");
@@ -75,6 +82,8 @@ function publicCandidate(asset: Record<string, unknown>, requestedKg: number, pu
     indicative_price_brl_ton: asset.indicative_price_brl_ton,
     available_tons: asset.available_tons,
     min_order_kg: asset.min_order_kg,
+    pricing_mode: asset.pricing_mode,
+    execution_mode: String(asset.pricing_mode || "") === "dynamic" ? "programmatic" : "assisted",
     claim_category: asset.claim_category,
     eligibility_status: asset.eligibility_status,
     registry_project_id: asset.registry_project_id,

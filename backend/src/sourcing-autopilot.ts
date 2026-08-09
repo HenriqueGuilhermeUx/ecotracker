@@ -1,5 +1,6 @@
 import { refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { pool } from "./db.js";
+import { enrichGoldStandardIfStale } from "./gold-standard-enrichment.js";
 import { refreshGoldStandardIfStale, refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 import { refreshKlimaX402Assets, refreshKlimaX402IfStale } from "./klima-x402.js";
 import { getSourcingSummary, rankSourcingInventory } from "./sourcing-engine.js";
@@ -38,11 +39,19 @@ function settledProvider<T>(result: PromiseSettledResult<T>, provider: string): 
     : { ok: false, provider, error: result.reason instanceof Error ? result.reason.message : String(result.reason || "Falha desconhecida") };
 }
 
+async function refreshGoldStandardProvider(force: boolean) {
+  const market = force ? await refreshGoldStandardMarketplace() : await refreshGoldStandardIfStale();
+  // O coletor base reseta o estado comercial para screening; o enriquecimento deve
+  // rodar no mesmo provider-cycle antes de qualquer ranking/autopilot snapshot.
+  const enrichment = await enrichGoldStandardIfStale(force ? 0 : 10 * 60 * 1000);
+  return { market, enrichment };
+}
+
 async function refreshProviders(force: boolean): Promise<ProviderResult[]> {
   const results = await Promise.allSettled([
     force ? refreshCarbonmarkAssets() : refreshCarbonmarkIfStale(),
     force ? refreshKlimaX402Assets() : refreshKlimaX402IfStale(),
-    force ? refreshGoldStandardMarketplace() : refreshGoldStandardIfStale(),
+    refreshGoldStandardProvider(force),
   ]);
   return [
     settledProvider(results[0], "carbonmark"),

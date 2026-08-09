@@ -100,6 +100,10 @@ services:
         value: https://public-api.goldstandard.org
       - key: GOLD_STANDARD_PUBLISHED_PRODUCT_LIMIT
         value: "100"
+      - key: GOLD_STANDARD_CATALOG_PAGES
+        value: "4"
+      - key: GOLD_STANDARD_ENRICH_INTERVAL_MS
+        value: "600000"
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET

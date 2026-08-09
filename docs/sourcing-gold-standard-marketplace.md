@@ -2,62 +2,73 @@
 
 ## Objetivo
 
-Adicionar o Gold Standard Marketplace como terceira fonte comercial do Sourcing Engine, sem confundir catálogo público com execução automática.
+Adicionar o Gold Standard Marketplace como terceira fonte comercial do Sourcing Engine, separando claramente três conceitos:
 
-## Fonte
+1. integridade/elegibilidade do crédito;
+2. capacidade da fonte de aposentar o crédito e emitir evidência;
+3. automação do checkout/execution no EcoTracker.
 
-O provider lê o storefront público do Gold Standard Marketplace e monitora:
+Um ativo pode ser elegível para compensação verificada e, ao mesmo tempo, exigir execução assistida.
 
-- produto/projeto;
-- preço por tonelada;
-- disponibilidade do storefront;
-- quantidade de estoque somente quando o payload público expõe `inventory_quantity` de forma consistente;
-- vintages declaradas;
-- tipo do projeto;
-- link público do projeto/registry quando resolvido.
+## Fontes oficiais
 
-O Gold Standard também mantém Public API, Commerce API e Export API. Nesta fase o EcoTracker usa o storefront para sourcing comercial e mantém `GOLD_STANDARD_PUBLIC_API_BASE` preparado para enriquecimento registral futuro. A Commerce API ainda não foi integrada.
+O provider combina duas leituras públicas do próprio Gold Standard:
+
+- `products.json`: produto, preço e metadados do storefront;
+- `/collections/projects`: estoque publicado, vintages, localização e tipo de projeto.
+
+O Gold Standard Marketplace informa publicamente que os créditos comprados são retirados no Gold Standard Impact Registry, que a Retirement Attribution pode ser atribuída a pessoa/empresa indicada pelo comprador e que o comprador recebe Retirement Certificate com links para os retirements.
+
+A Commerce API ainda não está integrada ao EcoTracker.
 
 ## Política conservadora de estoque
 
-`available_tons` só recebe uma quantidade quando o payload público expõe inventário numérico para todas as variantes relevantes.
+A camada base nunca infere estoque de números soltos em HTML. A camada de enriquecimento só usa o padrão explícito publicado pelo catálogo oficial:
 
-Se o storefront disser que o produto está disponível mas não expuser quantidade confiável:
+`In stock (N units)`
 
-- `available_tons = null`;
-- `availability_status = indicative`;
-- a cotação permanece assistida;
-- nenhum checkout automático é liberado.
+Como cada crédito representa 1 tCO2e, esse valor é armazenado como toneladas monitoradas.
 
-O EcoTracker não infere estoque a partir de textos, HTML ou números não estruturados.
+Mesmo com estoque publicado, `availability_status` permanece `indicative` nesta fase porque a disponibilidade final precisa ser reconfirmada no momento da compra assistida. Isso também impede que o lote seja classificado como execução automática.
 
 ## Política de vintage
 
-O marketplace pode vender um produto com várias vintages sem permitir que o comprador escolha uma vintage individual.
+O catálogo oficial publica `VINTAGES: AAAA | AAAA | ...`.
 
-Quando há múltiplas vintages:
+Um produto só pode ser classificado como compensação verificada assistida quando:
 
-- o ativo recebe a flag `gold-standard-vintage-selection-not-supported`;
-- a política usa a vintage mais antiga como limite conservador;
-- o ativo não entra automaticamente em compensação verificada;
-- uma futura integração deverá vincular a unidade efetivamente alocada/aposentada antes de emitir qualquer claim final.
+- há estoque positivo publicado;
+- todas as vintages declaradas estão dentro da política comercial EcoTracker;
+- existe evidência pública do produto/registry;
+- a fonte está conectada;
+- o Gold Standard Marketplace está oferecendo o produto.
 
-## Estado dos ativos nesta fase
+Quando há múltiplas vintages, a vintage mais antiga é usada como limite conservador para a política de idade. A unidade/vintage efetivamente aposentada deve ser confirmada no Retirement Certificate/Impact Registry antes do fulfillment final.
 
-Ativos Gold Standard Marketplace entram com:
+Produtos com qualquer vintage fora do limite continuam restritos; não fazemos cherry-picking de uma vintage recente dentro de um produto misto.
 
-- `pricing_mode = quote`;
-- `claim_category = climate_contribution`;
-- `eligibility_status = restricted`;
-- `retirement_supported = false` no EcoTracker;
+## Compensação verificada assistida
+
+Quando todos os critérios acima são satisfeitos, o ativo recebe:
+
+- `claim_category = voluntary_offset`;
+- `eligibility_status = eligible`;
+- `source_unit_status = tradable`;
+- `retirement_supported = true`;
+- `beneficiary_retirement_supported = true`;
+- `retirement_granularity_kg = 1000`;
 - `fractional_retirement_supported = false`;
-- mínimo comercial padrão de 1 tonelada.
+- `quality_tier = verified-offset-assisted`;
+- `pricing_mode = quote`;
+- `availability_status = indicative`.
 
-Isso não questiona a capacidade do Gold Standard de aposentar créditos vendidos pelo próprio marketplace. Significa apenas que o EcoTracker ainda não possui uma integração própria, automatizada e comprovável com a Commerce API para executar essa etapa.
+Isso significa **lote apto ao claim de compensação, mas com execução comercial assistida**.
+
+Não significa que o EcoTracker possa comprar automaticamente. O Gold Standard é quem executa o retirement no Impact Registry e emite o certificado; o EcoTracker precisa confirmar o pedido e posteriormente vincular a evidência de retirement ao fulfillment.
 
 ## Cotações assistidas
 
-A camada `assisted-quote-routes.ts` protege todas as fontes não executáveis automaticamente.
+A camada `assisted-quote-routes.ts` protege essas fontes.
 
 Uma fonte genérica só pode gerar cotação automática quando simultaneamente:
 
@@ -66,32 +77,33 @@ Uma fonte genérica só pode gerar cotação automática quando simultaneamente:
 - `source_status = connected`;
 - `available_tons` é conhecido e positivo.
 
-Qualquer fonte `quote`, `indicative`, manual ou sem volume confirmado gera somente uma solicitação `requested`, sem `final_total` e sem checkout.
+Gold Standard fica em `pricing_mode=quote` e `availability_status=indicative`, portanto gera somente solicitação `requested`, sem preço final travado e sem checkout automático.
 
 Carbonmark clássico continua usando sua rota especializada de quote travado. x402 continua bloqueado para execução financeira.
+
+## Enriquecimento e Autopilot
+
+O enriquecimento roda:
+
+- no boot, depois do refresh base do Gold Standard e antes do primeiro ranking;
+- antes das leituras públicas do mercado;
+- dentro do ciclo Gold Standard do Sourcing Autopilot;
+- em worker periódico próprio.
+
+O ciclo é atômico do ponto de vista do sourcing:
+
+`refresh storefront -> enrich estoque/vintages -> rank`
+
+Assim o coletor base nunca deixa os ativos temporariamente restritos entre refreshes.
 
 ## Endpoints
 
 - `GET /api/market/gold-standard/status`
 - `POST /api/admin/market/gold-standard/refresh`
+- `GET /api/market/compensation-assets?kg=1000`
 
-O Gold Standard também participa dos ciclos de:
-
-- `/api/market/sourcing/status`;
-- `/api/admin/market/sourcing/refresh`;
-- Sourcing Autopilot;
-- Opportunity Engine.
+O campo público `execution_mode` diferencia `programmatic` de `assisted`.
 
 ## Próxima etapa
 
-A ação de maior valor para este provider é `integrate_gold_standard_commerce_api`.
-
-Antes de habilitar execução automática, o EcoTracker precisa obter documentação/credenciais oficiais da Commerce API e implementar, com idempotência:
-
-1. seleção/vinculação do lote e vintage efetivamente fornecidos;
-2. preço executável para a quantidade pedida;
-3. criação de pedido;
-4. retirement com beneficiário;
-5. confirmação registral;
-6. certificado/comprovante;
-7. somente então fulfillment ECOT.
+A próxima evolução do provider é integrar a Commerce API para transformar execução assistida em programática. Antes disso, toda compra Gold Standard deve manter confirmação humana/operacional de preço, estoque, attribution e certificado.

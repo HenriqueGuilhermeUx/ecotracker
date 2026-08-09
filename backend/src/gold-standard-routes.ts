@@ -1,5 +1,6 @@
 import type { Application, NextFunction, Request, Response } from "express";
 import { requireAdmin } from "./auth.js";
+import { enrichGoldStandardIfStale, enrichGoldStandardMarketplaceAssets } from "./gold-standard-enrichment.js";
 import {
   goldStandardMarketplaceStatus,
   refreshGoldStandardIfStale,
@@ -8,8 +9,10 @@ import {
 
 export function registerGoldStandardRoutes(app: Application) {
   const refreshBeforeRead = async (_req: Request, _res: Response, next: NextFunction) => {
-    try { await refreshGoldStandardIfStale(); }
-    catch (error) { console.warn("[gold-standard] refresh before read failed", error); }
+    try {
+      await refreshGoldStandardIfStale();
+      await enrichGoldStandardIfStale();
+    } catch (error) { console.warn("[gold-standard] refresh/enrichment before read failed", error); }
     next();
   };
 
@@ -24,8 +27,9 @@ export function registerGoldStandardRoutes(app: Application) {
   app.get("/api/market/gold-standard/status", async (_req: Request, res: Response) => {
     try {
       const refresh = await refreshGoldStandardIfStale();
+      const enrichment = await enrichGoldStandardIfStale();
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...goldStandardMarketplaceStatus(), refresh });
+      res.json({ ...goldStandardMarketplaceStatus(), refresh, enrichment });
     } catch (error) {
       res.status(503).json({
         ...goldStandardMarketplaceStatus(),
@@ -37,8 +41,9 @@ export function registerGoldStandardRoutes(app: Application) {
   app.post("/api/admin/market/gold-standard/refresh", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const refresh = await refreshGoldStandardMarketplace();
+      const enrichment = await enrichGoldStandardMarketplaceAssets();
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...refresh, status: goldStandardMarketplaceStatus() });
+      res.json({ ...refresh, enrichment, status: goldStandardMarketplaceStatus() });
     } catch (error) {
       res.status(503).json({
         error: error instanceof Error ? error.message : "Falha ao sincronizar Gold Standard Marketplace",
