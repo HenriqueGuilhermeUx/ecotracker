@@ -29,7 +29,8 @@ function providerSpecific(asset: Json) {
 function automaticGenericSource(asset: Json, requestedKg: number) {
   if (providerSpecific(asset)) return false;
   const availableTons = Number(asset.available_tons);
-  return String(asset.pricing_mode || "") === "dynamic"
+  return asset.sourcing_executable === true
+    && String(asset.pricing_mode || "") === "dynamic"
     && String(asset.availability_status || "") === "confirmed"
     && String(asset.source_status || "") === "connected"
     && Number.isFinite(availableTons)
