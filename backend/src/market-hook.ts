@@ -3,6 +3,8 @@ import { initMarketDb } from "./market-db.js";
 import { initCommerceDb } from "./commerce-db.js";
 import { initDemandDeskDb } from "./demand-desk-db.js";
 import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
+import { initDemandProposalDb } from "./demand-proposal-db.js";
+import { registerDemandProposalRoutes } from "./demand-proposal-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
@@ -66,6 +68,7 @@ if (!proto.__marketInstalled) {
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
     registerDemandDeskRoutes(app);
+    registerDemandProposalRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
 
@@ -75,6 +78,7 @@ if (!proto.__marketInstalled) {
       .then(() => initAssistedSourcingDb())
       .then(() => initSupplyDeskDb())
       .then(() => initDemandDeskDb())
+      .then(() => initDemandProposalDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
