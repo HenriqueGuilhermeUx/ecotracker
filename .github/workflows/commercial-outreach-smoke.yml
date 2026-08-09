@@ -1,0 +1,57 @@
+name: EcoTracker Commercial Outreach Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'backend/src/commercial-outreach*.ts'
+      - 'backend/src/demand-proposal*.ts'
+      - 'backend/scripts/commercial-outreach-smoke.mjs'
+      - '.github/workflows/commercial-outreach-smoke.yml'
+      - 'backend/src/market-hook.ts'
+      - 'render.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/commercial-outreach*.ts'
+      - 'backend/src/demand-proposal*.ts'
+      - 'backend/scripts/commercial-outreach-smoke.mjs'
+      - '.github/workflows/commercial-outreach-smoke.yml'
+      - 'backend/src/market-hook.ts'
+      - 'render.yaml'
+
+jobs:
+  commercial-outreach:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_commercial_outreach
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_commercial_outreach"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Run Commercial Outreach smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_commercial_outreach
+          NODE_ENV: test
+          ECOT_COMMERCIAL_OUTREACH_ENABLED: "false"
+          ECOT_COMMERCIAL_OUTREACH_ACK: DISABLED
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+          PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com
+        run: node scripts/commercial-outreach-smoke.mjs
