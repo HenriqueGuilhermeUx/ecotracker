@@ -9,6 +9,7 @@ import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
+import { enrichGoldStandardIfStale, startGoldStandardEnrichmentWorker } from "./gold-standard-enrichment.js";
 import { registerGoldStandardRoutes } from "./gold-standard-routes.js";
 import { refreshGoldStandardIfStale } from "./gold-standard-marketplace.js";
 import { registerKlimaX402Routes } from "./klima-x402-routes.js";
@@ -79,7 +80,11 @@ if (!proto.__marketInstalled) {
             if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason);
           });
         });
+        // Enriquecimento usa o catálogo oficial para estoque/vintages e precisa rodar
+        // antes do primeiro ranking, senão ofertas Gold Standard assistidas ficariam restritas.
+        await enrichGoldStandardIfStale(0).catch((error) => console.warn("[gold-standard] initial enrichment failed", error));
         await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
+        startGoldStandardEnrichmentWorker();
         startSourcingAutopilot();
         startCommerceWorker();
         return original.apply(this, args);
