@@ -65,5 +65,47 @@ export async function initCommercialOutreachDb(): Promise<void> {
       ON demand_outbox(status,created_at DESC);
     CREATE INDEX IF NOT EXISTS demand_outreach_events_proposal_idx
       ON demand_outreach_events(proposal_id,created_at DESC);
+
+    CREATE OR REPLACE FUNCTION ecotracker_guard_approved_proposal_mutation()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM demand_proposal_reviews r
+        WHERE r.proposal_id=OLD.id AND r.status='approved'
+      ) THEN
+        RAISE EXCEPTION 'Approved commercial proposal is immutable; create a new proposal revision';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS guard_approved_proposal_mutation ON demand_proposals;
+    CREATE TRIGGER guard_approved_proposal_mutation
+      BEFORE UPDATE OF target_tonnes,covered_tonnes,uncovered_tonnes,coverage_pct,
+        source_cost_brl,final_total_brl,price_per_tonne_brl,checkout_mode,execution_mode,expires_at
+      ON demand_proposals
+      FOR EACH ROW EXECUTE FUNCTION ecotracker_guard_approved_proposal_mutation();
+
+    CREATE OR REPLACE FUNCTION ecotracker_guard_approved_proposal_item_mutation()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      target_proposal_id BIGINT;
+    BEGIN
+      target_proposal_id := CASE WHEN TG_OP='DELETE' THEN OLD.proposal_id ELSE NEW.proposal_id END;
+      IF EXISTS (
+        SELECT 1 FROM demand_proposal_reviews r
+        WHERE r.proposal_id=target_proposal_id AND r.status='approved'
+      ) THEN
+        RAISE EXCEPTION 'Approved commercial proposal items are immutable; create a new proposal revision';
+      END IF;
+      IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS guard_approved_proposal_item_mutation ON demand_proposal_items;
+    CREATE TRIGGER guard_approved_proposal_item_mutation
+      BEFORE INSERT OR UPDATE OR DELETE ON demand_proposal_items
+      FOR EACH ROW EXECUTE FUNCTION ecotracker_guard_approved_proposal_item_mutation();
   `);
 }
