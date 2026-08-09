@@ -1,6 +1,8 @@
 import express from "express";
 import { initMarketDb } from "./market-db.js";
 import { initCommerceDb } from "./commerce-db.js";
+import { initCorporateBasketDb } from "./corporate-basket-db.js";
+import { registerCorporateBasketRoutes } from "./corporate-basket-routes.js";
 import { initDemandDeskDb } from "./demand-desk-db.js";
 import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
 import { initDemandProposalDb } from "./demand-proposal-db.js";
@@ -71,6 +73,7 @@ if (!proto.__marketInstalled) {
     registerAcrSupplyScoutRoutes(app);
     registerDemandDeskRoutes(app);
     registerDemandProposalRoutes(app);
+    registerCorporateBasketRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
 
@@ -81,6 +84,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyDeskDb())
       .then(() => initDemandDeskDb())
       .then(() => initDemandProposalDb())
+      .then(() => initCorporateBasketDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
