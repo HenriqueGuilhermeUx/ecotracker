@@ -31,8 +31,11 @@ export type SourcingSummary = {
   refreshedAt: string;
 };
 
-// Carbonmark.ts já protege o teto em 100. O problema anterior era o default de 30.
-// Esse default amplia a descoberta sem afrouxar a política de elegibilidade.
+let lastRankedAt = 0;
+let rankInFlight: Promise<SourcingSummary> | null = null;
+
+// Carbonmark.ts já protege o teto em 100. Esse default amplia discovery sem
+// afrouxar a política de elegibilidade. O render.yaml replica estes valores.
 export function configureSourcingDefaults(): void {
   if (!process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT) process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT = "100";
   if (!process.env.ECOT_MIN_VERIFIED_OFFSET_ASSETS) process.env.ECOT_MIN_VERIFIED_OFFSET_ASSETS = "5";
@@ -143,7 +146,7 @@ function shelfPriority(shelf: SourcingShelf): number {
   return 2;
 }
 
-export async function rankSourcingInventory(): Promise<SourcingSummary> {
+async function executeRanking(): Promise<SourcingSummary> {
   const { rows } = await pool.query("SELECT * FROM monitored_assets WHERE active=TRUE");
   const ranked = rows.map((asset) => ({ asset, ranking: scoreSourcingAsset(asset) }))
     .sort((left, right) => {
@@ -158,35 +161,59 @@ export async function rankSourcingInventory(): Promise<SourcingSummary> {
       return leftPrice - rightPrice;
     });
 
-  let rank = 0;
-  for (const item of ranked) {
-    rank += 1;
-    const details = {
-      sourcingScore: item.ranking.score,
-      sourcingTier: item.ranking.tier,
-      sourcingShelf: item.ranking.shelf,
-      sourcingRank: rank,
-      sourcingExecutable: item.ranking.executable,
-      sourcingFractional: item.ranking.fractional,
-      sourcingReasons: item.ranking.reasons,
-      sourcingRankedAt: new Date().toISOString(),
-    };
+  if (ranked.length) {
+    const ids: number[] = [];
+    const scores: number[] = [];
+    const tiers: string[] = [];
+    const shelves: string[] = [];
+    const ranks: number[] = [];
+    const executables: boolean[] = [];
+
+    ranked.forEach((item, index) => {
+      ids.push(item.ranking.id);
+      scores.push(item.ranking.score);
+      tiers.push(item.ranking.tier);
+      shelves.push(item.ranking.shelf);
+      ranks.push(index + 1);
+      executables.push(item.ranking.executable);
+    });
+
+    // Uma única escrita para todo o inventário. O v1 fazia um UPDATE por ativo,
+    // o que criaria carga desnecessária no Postgres quando o catálogo crescesse.
     await pool.query(`
-      UPDATE monitored_assets SET
-        sourcing_score=$2,
-        sourcing_tier=$3,
-        sourcing_shelf=$4,
-        sourcing_rank=$5,
-        sourcing_executable=$6,
-        sourcing_checked_at=NOW(),
-        monitor_details=COALESCE(monitor_details,'{}'::jsonb) || $7::jsonb,
-        updated_at=updated_at
-      WHERE id=$1`,
-    [item.ranking.id, item.ranking.score, item.ranking.tier, item.ranking.shelf, rank,
-      item.ranking.executable, JSON.stringify(details)]);
+      UPDATE monitored_assets AS a SET
+        sourcing_score=r.score,
+        sourcing_tier=r.tier,
+        sourcing_shelf=r.shelf,
+        sourcing_rank=r.rank,
+        sourcing_executable=r.executable,
+        sourcing_checked_at=NOW()
+      FROM UNNEST(
+        $1::bigint[],
+        $2::numeric[],
+        $3::text[],
+        $4::text[],
+        $5::int[],
+        $6::boolean[]
+      ) AS r(id,score,tier,shelf,rank,executable)
+      WHERE a.id=r.id`,
+    [ids, scores, tiers, shelves, ranks, executables]);
   }
 
+  lastRankedAt = Date.now();
   return getSourcingSummary();
+}
+
+export function rankSourcingInventory(
+  maxAgeMs = Math.max(5_000, Number(process.env.ECOT_SOURCING_RANK_MAX_AGE_MS || 60_000)),
+): Promise<SourcingSummary> {
+  if (maxAgeMs > 0 && lastRankedAt && Date.now() - lastRankedAt < maxAgeMs) {
+    return getSourcingSummary();
+  }
+  if (!rankInFlight) {
+    rankInFlight = executeRanking().finally(() => { rankInFlight = null; });
+  }
+  return rankInFlight;
 }
 
 export async function getSourcingSummary(): Promise<SourcingSummary> {
