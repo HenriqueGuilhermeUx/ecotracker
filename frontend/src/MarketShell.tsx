@@ -9,6 +9,7 @@ export function MarketShell({ children }: { children: ReactNode }) {
           <a href="#home">Protocolo</a>
           <a className="marketplace-nav" href="#marketplace">Marketplace</a>
           <a href="#planos">Planos</a>
+          <a className="ghost" href="#carbon-desk">Carbon Desk</a>
           <a className="ghost" href="#market-admin">Operação</a>
         </nav>
       </header>
