@@ -6,13 +6,15 @@ import {
   flagCorporateBasketFulfillmentLegReview,
   getCorporateBasketEvidence,
   getCorporateBasketFulfillment,
-  markCorporateBasketEcotDelivered,
   recordCorporateBasketAcquisition,
   recordCorporateBasketDocument,
   recordCorporateBasketRetirement,
-  resolveCorporateBasketFulfillmentLegReview,
   startCorporateBasketFulfillment,
 } from "./corporate-basket-fulfillment.js";
+import {
+  markCorporateBasketEcotDelivered,
+  resolveCorporateBasketFulfillmentLegReview,
+} from "./corporate-basket-fulfillment-extra.js";
 
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value || "";
 const fail = (res: Response, error: unknown) => {
