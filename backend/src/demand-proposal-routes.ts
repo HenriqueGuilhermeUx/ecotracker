@@ -2,6 +2,7 @@ import type { Application, Request, Response } from "express";
 import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { pool } from "./db.js";
+import { convertSingleAssetProposal } from "./demand-proposal-conversion.js";
 import { createDemandProposal } from "./demand-proposal.js";
 
 const fail = (res: Response, error: unknown) => {
@@ -68,6 +69,12 @@ export function registerDemandProposalRoutes(app: Application) {
       if (!proposal) return res.status(404).json({ error: "Proposta não encontrada" });
       res.setHeader("Cache-Control", "no-store");
       res.json(proposal);
+    } catch (error) { fail(res, error); }
+  });
+
+  app.post("/api/admin/demand/proposals/:id/convert-single", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      res.json(await convertSingleAssetProposal(Number(req.params.id)));
     } catch (error) { fail(res, error); }
   });
 

@@ -26,6 +26,10 @@ export async function initDemandProposalDb(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE demand_proposals
+      ADD COLUMN IF NOT EXISTS converted_quote_id BIGINT REFERENCES quote_requests(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS converted_at TIMESTAMPTZ;
+
     CREATE TABLE IF NOT EXISTS demand_proposal_items (
       id BIGSERIAL PRIMARY KEY,
       proposal_id BIGINT NOT NULL REFERENCES demand_proposals(id) ON DELETE CASCADE,
@@ -50,6 +54,8 @@ export async function initDemandProposalDb(): Promise<void> {
       ON demand_proposals(status,expires_at,created_at DESC);
     CREATE INDEX IF NOT EXISTS demand_proposals_opportunity_idx
       ON demand_proposals(opportunity_id,created_at DESC);
+    CREATE INDEX IF NOT EXISTS demand_proposals_converted_quote_idx
+      ON demand_proposals(converted_quote_id);
     CREATE INDEX IF NOT EXISTS demand_proposal_items_proposal_idx
       ON demand_proposal_items(proposal_id,id);
   `);
