@@ -8,7 +8,7 @@ type X402Credit = {
   tokenId: number;
   registry: string | null;
   projectId: string | null;
-  vintage: number | null;
+  vintage: unknown;
   liquidity: string;
   liquidityFormatted: string;
 };
@@ -69,6 +69,22 @@ function stringAt(...values: unknown[]): string | null {
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
   return null;
+}
+
+function vintageYear(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const raw = String(value).trim();
+  const direct = Number(raw);
+  if (Number.isInteger(direct) && direct >= 1990 && direct <= 2100) return direct;
+
+  // O discovery x402 pode expor vintage como data compacta (ex. 20240430),
+  // ISO date ou outro identificador que começa pelo ano. Para a política
+  // EcoTracker precisamos apenas de um ano válido; o valor bruto é preservado
+  // em monitor_details para qualquer quote futuro ao provider.
+  const match = raw.match(/^(19|20)\d{2}/);
+  if (!match) return null;
+  const year = Number(raw.slice(0, 4));
+  return Number.isInteger(year) && year >= 1990 && year <= 2100 ? year : null;
 }
 
 function registryAutomaticallyEligible(registry: string) {
@@ -146,7 +162,8 @@ export async function refreshKlimaX402Assets(): Promise<KlimaX402RefreshResult> 
         const liquidity = numberAt(credit.liquidityFormatted) || 0;
         const registry = stringAt(credit.registry) || "Klima x402";
         const projectId = stringAt(credit.projectId);
-        const vintage = Number.isInteger(credit.vintage) ? Number(credit.vintage) : null;
+        const providerVintage = credit.vintage;
+        const vintage = vintageYear(providerVintage);
         const isPuro = registry.toLowerCase().includes("puro");
         const registryEligible = registryAutomaticallyEligible(registry);
         const vintageEligible = vintage != null && vintage >= minVintage && vintage <= currentYear;
@@ -154,6 +171,7 @@ export async function refreshKlimaX402Assets(): Promise<KlimaX402RefreshResult> 
         const riskFlags = [
           "x402-discovery-only-not-enabled-for-ecotracker-checkout",
           "x402-spot-price-requires-live-quote-before-purchase",
+          ...(vintage == null ? ["vintage-not-resolved"] : []),
           ...(!registryCandidate ? ["registry-or-vintage-requires-eligibility-review"] : []),
           ...(isPuro ? ["puro-retirement-requires-consumption-metadata-and-whole-tonnes"] : []),
         ];
@@ -164,6 +182,7 @@ export async function refreshKlimaX402Assets(): Promise<KlimaX402RefreshResult> 
           liquidity,
           registry,
           projectId,
+          providerVintage,
           vintage,
           minOrderKg,
           minRetirementTonnes,
@@ -208,6 +227,7 @@ export async function refreshKlimaX402Assets(): Promise<KlimaX402RefreshResult> 
         tokenId,
         registry: item.registry,
         projectId: item.projectId,
+        providerVintage: item.providerVintage,
         vintage: item.vintage,
         spotPriceUsdcPerTonne: item.spotPrice,
         liquidityTonnes: item.liquidity,
@@ -281,6 +301,7 @@ export async function previewKlimaX402Quote(asset: Record<string, unknown>, requ
   const creditToken = stringAt(details.creditToken);
   if (!carbonClass || !creditToken) throw new Error("Metadados x402 incompletos para cotação");
   const amount = Math.max(1, requestedKg) / 1000;
+  const providerVintage = details.providerVintage ?? details.vintage;
   return request<Json>({
     action: "quote",
     chainId: CHAIN_ID,
@@ -288,7 +309,7 @@ export async function previewKlimaX402Quote(asset: Record<string, unknown>, requ
     amount: String(amount),
     carbonClass,
     creditToken,
-    ...(details.vintage != null ? { vintage: Number(details.vintage) } : {}),
+    ...(providerVintage != null ? { vintage: providerVintage } : {}),
     ...(details.tokenId != null ? { tokenId: String(details.tokenId) } : {}),
   }, 20_000);
 }
