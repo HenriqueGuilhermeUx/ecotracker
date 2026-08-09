@@ -87,6 +87,17 @@ export async function initSourcingAutopilotDb() {
   `);
 }
 
+async function pruneHistory() {
+  const retentionDays = Math.max(1, Math.min(365, numberEnv("ECOT_SOURCING_RUN_RETENTION_DAYS", 30)));
+  const result = await pool.query(
+    `DELETE FROM sourcing_autopilot_runs
+     WHERE started_at < NOW() - ($1::text || ' days')::interval
+     RETURNING id`,
+    [String(retentionDays)],
+  );
+  return { retentionDays, deletedRuns: result.rowCount || 0 };
+}
+
 async function setAlert(input: {
   key: string;
   active: boolean;
@@ -185,6 +196,8 @@ async function executeCycle(trigger: Trigger, forceProviders: boolean): Promise<
       replenishmentAttempted, opportunity.blockedOpportunities, opportunity.policyReviewReady,
       JSON.stringify(topActions)]);
 
+    await pruneHistory().catch((error) => console.warn("[sourcing-autopilot] retention cleanup failed", error));
+
     return {
       runId,
       trigger: replenishmentAttempted ? "replenishment" : trigger,
@@ -205,6 +218,7 @@ async function executeCycle(trigger: Trigger, forceProviders: boolean): Promise<
       `UPDATE sourcing_autopilot_runs SET status='failed',providers=$2::jsonb,error=$3,completed_at=NOW() WHERE id=$1`,
       [runId, JSON.stringify(providers), message],
     ).catch(() => undefined);
+    await pruneHistory().catch(() => undefined);
     throw error;
   }
 }
@@ -226,6 +240,7 @@ export async function getSourcingAutopilotStatus() {
     enabled: process.env.ECOT_SOURCING_AUTOPILOT_DISABLED !== "true",
     intervalMs: Math.max(60_000, numberEnv("ECOT_SOURCING_AUTOPILOT_INTERVAL_MS", 10 * 60 * 1000)),
     replenishMinIntervalMs: Math.max(60_000, numberEnv("ECOT_SOURCING_REPLENISH_MIN_INTERVAL_MS", 15 * 60 * 1000)),
+    runRetentionDays: Math.max(1, Math.min(365, numberEnv("ECOT_SOURCING_RUN_RETENTION_DAYS", 30))),
     inFlight: Boolean(cycleInFlight),
     latestRun: latest.rows[0] || null,
     openAlerts: alerts.rows.filter((alert) => alert.status === "open"),

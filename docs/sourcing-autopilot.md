@@ -14,7 +14,8 @@ O Autopilot roda no boot e depois em intervalo configurável.
 4. se o inventário verificado estiver abaixo da meta e o cooldown permitir, força uma nova varredura dos providers;
 5. gera o Opportunity Report;
 6. persiste um snapshot da rodada;
-7. abre ou resolve alertas operacionais.
+7. abre ou resolve alertas operacionais;
+8. remove runs acima da janela de retenção configurada.
 
 ## Alertas
 
@@ -41,7 +42,10 @@ Admin:
 - `ECOT_SOURCING_AUTOPILOT_DISABLED=false`
 - `ECOT_SOURCING_AUTOPILOT_INTERVAL_MS=600000` (10 min)
 - `ECOT_SOURCING_REPLENISH_MIN_INTERVAL_MS=900000` (15 min)
+- `ECOT_SOURCING_RUN_RETENTION_DAYS=30`
 - `ECOT_MIN_VERIFIED_OFFSET_ASSETS=5`
+
+A retenção automática remove apenas snapshots de runs mais antigos que a janela configurada; alertas são agregados por chave e não crescem a cada ciclo.
 
 A execução financeira x402 permanece explicitamente desligada com `KLIMA_X402_EXECUTION_ENABLED=false`.
 
