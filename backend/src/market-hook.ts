@@ -11,6 +11,9 @@ import { initDemandDeskDb } from "./demand-desk-db.js";
 import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
 import { initDemandProposalDb } from "./demand-proposal-db.js";
 import { registerDemandProposalRoutes } from "./demand-proposal-routes.js";
+import { initDemandAutopilotDb } from "./demand-autopilot-db.js";
+import { registerDemandAutopilotRoutes } from "./demand-autopilot-routes.js";
+import { startDemandAutopilotWorker } from "./demand-autopilot.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
@@ -77,6 +80,7 @@ if (!proto.__marketInstalled) {
     registerAcrSupplyScoutRoutes(app);
     registerDemandDeskRoutes(app);
     registerDemandProposalRoutes(app);
+    registerDemandAutopilotRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
     registerCorporateBasketFulfillmentRoutes(app);
@@ -91,6 +95,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyDeskDb())
       .then(() => initDemandDeskDb())
       .then(() => initDemandProposalDb())
+      .then(() => initDemandAutopilotDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
       .then(() => initCorporateBasketFulfillmentDb())
@@ -120,6 +125,7 @@ if (!proto.__marketInstalled) {
         startGoldStandardEnrichmentWorker();
         startX402CfcEnrichmentWorker();
         startSourcingAutopilot();
+        startDemandAutopilotWorker();
         startCommerceWorker();
         return original.apply(this, args);
       })
