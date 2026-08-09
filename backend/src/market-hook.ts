@@ -6,6 +6,7 @@ import { registerDemandDeskRoutes } from "./demand-desk-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
+import { registerAcrSupplyScoutRoutes } from "./acr-supply-scout.js";
 import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
 import { initAssistedSourcingDb } from "./assisted-sourcing-db.js";
 import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-routes.js";
@@ -65,6 +66,7 @@ if (!proto.__marketInstalled) {
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
+    registerAcrSupplyScoutRoutes(app);
     registerDemandDeskRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
