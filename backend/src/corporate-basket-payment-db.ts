@@ -109,6 +109,17 @@ export async function initCorporateBasketPaymentDb(): Promise<void> {
       effective_capacity_kg NUMERIC;
       already_reserved_kg NUMERIC;
     BEGIN
+      -- A transição active -> committed acontece somente depois de um pagamento
+      -- reconciliado. A capacidade já foi validada antes de abrir o checkout;
+      -- nunca rejeitamos a reconciliação de dinheiro capturado por drift posterior.
+      IF TG_OP='UPDATE'
+         AND OLD.status='active'
+         AND NEW.status='committed'
+         AND OLD.asset_id=NEW.asset_id
+         AND OLD.reserved_kg=NEW.reserved_kg THEN
+        RETURN NEW;
+      END IF;
+
       IF NEW.status NOT IN ('active','committed') THEN
         RETURN NEW;
       END IF;
