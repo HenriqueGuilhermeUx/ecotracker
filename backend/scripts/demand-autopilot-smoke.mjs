@@ -8,6 +8,7 @@ import { initSupplyDeskDb } from "../dist/supply-desk-db.js";
 import { initDemandDeskDb } from "../dist/demand-desk-db.js";
 import { initDemandProposalDb } from "../dist/demand-proposal-db.js";
 import { initDemandAutopilotDb } from "../dist/demand-autopilot-db.js";
+import { initDemandSupplyRfqDb } from "../dist/demand-supply-rfq-db.js";
 import { demandAutopilotStatus, runDemandAutopilot, updateDemandAutopilotSettings } from "../dist/demand-autopilot.js";
 
 const tag = Date.now();
@@ -22,6 +23,7 @@ async function init() {
   await initDemandDeskDb();
   await initDemandProposalDb();
   await initDemandAutopilotDb();
+  await initDemandSupplyRfqDb();
 }
 
 async function seedAsset() {
@@ -81,6 +83,7 @@ async function run() {
   });
   const before = await demandAutopilotStatus();
   assert.equal(before.live,false,"Worker recorrente deve permanecer desligado no teste");
+  assert.equal(before.behavior.createsSupplyRfqsForCoverageGaps,true);
 
   const first = await runDemandAutopilot({triggerMode:"manual",force:true});
   assert.equal(first.skipped,false);
@@ -98,11 +101,20 @@ async function run() {
   assert.equal(Number(coveredItem.targetTonnes),5000);
   assert.ok(Number(coveredItem.proposalId)>0);
   assert.equal(coveredItem.nextAction,"commercial_review");
+  assert.equal(coveredItem.rfqStatus,"resolved_or_not_needed");
   assert.equal(gapItem.fullyCovered,false);
   assert.equal(Number(gapItem.targetTonnes),30000);
   assert.equal(Number(gapItem.uncoveredTonnes),18000);
   assert.equal(gapItem.proposalId,null);
+  assert.ok(Number(gapItem.rfqId)>0,"Gap precisa materializar RFQ");
   assert.equal(gapItem.nextAction,"source_more_credits");
+
+  const rfq = (await pool.query(`SELECT * FROM market_maker_rfqs WHERE id=$1`,[gapItem.rfqId])).rows[0];
+  assert.ok(rfq);
+  assert.equal(Number(rfq.target_tonnes),30000);
+  assert.equal(Number(rfq.covered_tonnes),12000);
+  assert.equal(Number(rfq.gap_tonnes),18000);
+  assert.equal(rfq.status,"open","Sem Supply Desk candidato, RFQ deve ficar aberto");
 
   const gapOpportunity = (await pool.query(`SELECT * FROM demand_opportunities WHERE id=$1`,[gapItem.opportunityId])).rows[0];
   assert.equal(gapOpportunity.status,"sourcing_required");
@@ -116,6 +128,11 @@ async function run() {
   assert.equal(second.summary.opportunitiesReused,2);
   assert.equal(second.summary.proposalsCreated,0,"Segundo run não pode duplicar proposta ainda válida");
   assert.equal(proposalCountAfter,proposalCountBefore);
+  const secondGap = second.items.find((item) => Number(item.accountId)===Number(gapCompany.account.id));
+  assert.equal(Number(secondGap.rfqId),Number(gapItem.rfqId),"Segundo run deve reutilizar o mesmo RFQ");
+
+  const rfqCount = Number((await pool.query(`SELECT COUNT(*)::int AS count FROM market_maker_rfqs`)).rows[0].count);
+  assert.equal(rfqCount,1,"Autopilot não pode duplicar RFQs por oportunidade");
 
   const uniqueKeys = await pool.query(`
     SELECT COUNT(*)::int AS total,COUNT(DISTINCT autopilot_key)::int AS unique_keys
@@ -134,6 +151,7 @@ async function run() {
     coveredTargetTonnes:coveredItem.targetTonnes,
     gapTargetTonnes:gapItem.targetTonnes,
     gapUncoveredTonnes:gapItem.uncoveredTonnes,
+    rfqId:gapItem.rfqId,
     secondRunReused:second.summary.opportunitiesReused,
     paymentOrOutreachSideEffects:false,
     recurringWorkerLive:after.live,
