@@ -1,0 +1,61 @@
+name: Probe production sourcing
+
+on:
+  pull_request:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe EcoTracker production sourcing
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://ecotracker-api-cik7.onrender.com"
+
+          echo "Waiting for production health on current main deployment..."
+          for attempt in $(seq 1 20); do
+            if curl -fsS --max-time 20 "$BASE/api/health" -o health.json; then
+              echo "health reached on attempt $attempt"
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "production health did not become reachable"
+              exit 1
+            fi
+            sleep 15
+          done
+
+          curl -fsS --max-time 90 "$BASE/api/market/sourcing/health" -o sourcing-health.json
+          curl -fsS --max-time 120 "$BASE/api/market/sourcing/status" -o sourcing-status.json
+          curl -fsS --max-time 90 "$BASE/api/market/gold-standard/status" -o gold-standard-status.json
+          curl -fsS --max-time 90 "$BASE/api/market/klima-x402/status" -o x402-status.json
+          curl -fsS --max-time 90 "$BASE/api/market/carbonmark/status" -o carbonmark-status.json
+
+          echo '=== HEALTH ==='
+          cat health.json
+          echo
+          echo '=== SOURCING HEALTH ==='
+          jq -c '{status,summary:{totalActiveAssets:.summary.totalActiveAssets,verifiedCompensationAssets:.summary.verifiedCompensationAssets,executableCompensationAssets:.summary.executableCompensationAssets,fractionalCompensationAssets:.summary.fractionalCompensationAssets,climateContributionAssets:.summary.climateContributionAssets,restrictedAssets:.summary.restrictedAssets,minimumVerifiedTarget:.summary.minimumVerifiedTarget,needsReplenishment:.summary.needsReplenishment,needsFractionalSource:.summary.needsFractionalSource},alerts}' sourcing-health.json
+          echo '=== SOURCING STATUS ==='
+          jq -c '{totalActiveAssets,verifiedCompensationAssets,executableCompensationAssets,fractionalCompensationAssets,climateContributionAssets,restrictedAssets,minimumVerifiedTarget,needsReplenishment,needsFractionalSource,providersHealthy,providersDegraded,blockers,nearMissCandidates:(.nearMissCandidates[0:8]),carbonmark,goldStandard,klimaX402}' sourcing-status.json
+          echo '=== GOLD STANDARD ==='
+          jq -c . gold-standard-status.json
+          echo '=== X402 ==='
+          jq -c . x402-status.json
+          echo '=== CARBONMARK ==='
+          jq -c . carbonmark-status.json
+
+      - name: Upload probe JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-production-sourcing-probe
+          path: |
+            health.json
+            sourcing-health.json
+            sourcing-status.json
+            gold-standard-status.json
+            x402-status.json
+            carbonmark-status.json
+          if-no-files-found: warn
