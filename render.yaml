@@ -80,6 +80,12 @@ services:
         value: "20"
       - key: COMMERCE_WORKER_INTERVAL_MS
         value: "15000"
+      - key: CORPORATE_BASKET_PAYMENT_ENABLED
+        value: "false"
+      - key: CORPORATE_BASKET_PAYMENT_ACK
+        value: "DISABLED"
+      - key: ECOT_BASKET_PAYMENT_WEBHOOK_GRACE_MS
+        value: "300000"
       - key: CARBONMARK_ENVIRONMENT
         value: sandbox
       - key: CARBONMARK_API_BASE
