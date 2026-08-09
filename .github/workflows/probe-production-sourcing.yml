@@ -15,16 +15,15 @@ jobs:
 
           for attempt in $(seq 1 28); do
             health_code=$(curl -sS --max-time 20 -o health.json -w '%{http_code}' "$BASE/api/health" || true)
-            x402_code=$(curl -sS --max-time 60 -o x402-status.json -w '%{http_code}' "$BASE/api/market/klima-x402/status" || true)
-            gs_code=$(curl -sS --max-time 90 -o gold-standard-status.json -w '%{http_code}' "$BASE/api/market/gold-standard/status" || true)
-            gs_enrichment=$(jq -r 'has("enrichment")' gold-standard-status.json 2>/dev/null || echo false)
-            if [ "$health_code" = "200" ] && [ "$x402_code" = "200" ] && [ "$gs_code" = "200" ] && [ "$gs_enrichment" = "true" ]; then
-              echo "new production sourcing deployment healthy on attempt $attempt"
+            x402_code=$(curl -sS --max-time 90 -o x402-status.json -w '%{http_code}' "$BASE/api/market/klima-x402/status" || true)
+            cfc_present=$(jq -r 'has("cfcEnrichment")' x402-status.json 2>/dev/null || echo false)
+            if [ "$health_code" = "200" ] && [ "$x402_code" = "200" ] && [ "$cfc_present" = "true" ]; then
+              echo "CFC production deployment healthy on attempt $attempt"
               break
             fi
-            echo "attempt=$attempt health=$health_code x402=$x402_code goldStandard=$gs_code enrichment=$gs_enrichment"
+            echo "attempt=$attempt health=$health_code x402=$x402_code cfcEnrichment=$cfc_present"
             if [ "$attempt" -eq 28 ]; then
-              echo "production did not reach enriched Gold Standard deployment in probe window"
+              echo "production did not reach CFC enriched deployment in probe window"
             else
               sleep 15
             fi
@@ -44,56 +43,29 @@ jobs:
           fetch x402-status /api/market/klima-x402/status
           fetch carbonmark-status /api/market/carbonmark/status
           fetch assets /api/market/assets
-          fetch compensation-assets '/api/market/compensation-assets?kg=1000'
+          fetch compensation-1kg '/api/market/compensation-assets?kg=1'
+          fetch compensation-1000kg '/api/market/compensation-assets?kg=1000'
 
           echo '=== HTTP STATUS ==='
           for f in *.status; do echo "$f=$(cat "$f")"; done
 
-          echo '=== HEALTH ==='
-          cat health.json 2>/dev/null || true
-          echo
+          echo '=== SOURCING HEALTH ==='
+          jq -c '{status,summary:{totalActiveAssets:.summary.totalActiveAssets,verifiedCompensationAssets:.summary.verifiedCompensationAssets,executableCompensationAssets:.summary.executableCompensationAssets,fractionalCompensationAssets:.summary.fractionalCompensationAssets,climateContributionAssets:.summary.climateContributionAssets,restrictedAssets:.summary.restrictedAssets,minimumVerifiedTarget:.summary.minimumVerifiedTarget,needsReplenishment:.summary.needsReplenishment,needsFractionalSource:.summary.needsFractionalSource},alerts}' sourcing-health.json 2>/dev/null || cat sourcing-health.json
 
-          if jq -e . sourcing-health.json >/dev/null 2>&1; then
-            echo '=== SOURCING HEALTH ==='
-            jq -c '{status,summary:{totalActiveAssets:.summary.totalActiveAssets,verifiedCompensationAssets:.summary.verifiedCompensationAssets,executableCompensationAssets:.summary.executableCompensationAssets,fractionalCompensationAssets:.summary.fractionalCompensationAssets,climateContributionAssets:.summary.climateContributionAssets,restrictedAssets:.summary.restrictedAssets,minimumVerifiedTarget:.summary.minimumVerifiedTarget,needsReplenishment:.summary.needsReplenishment,needsFractionalSource:.summary.needsFractionalSource},latestRun,alerts}' sourcing-health.json
-          fi
+          echo '=== SOURCING STATUS ==='
+          jq -c '{totalActiveAssets,verifiedCompensationAssets,executableCompensationAssets,fractionalCompensationAssets,climateContributionAssets,restrictedAssets,minimumVerifiedTarget,needsReplenishment,needsFractionalSource,providersHealthy,providersDegraded,klimaX402}' sourcing-status.json 2>/dev/null || cat sourcing-status.json
 
-          if jq -e . sourcing-status.json >/dev/null 2>&1; then
-            echo '=== SOURCING STATUS ==='
-            jq -c '{totalActiveAssets,verifiedCompensationAssets,executableCompensationAssets,fractionalCompensationAssets,climateContributionAssets,restrictedAssets,minimumVerifiedTarget,needsReplenishment,needsFractionalSource,providersHealthy,providersDegraded,blockers,nearMissCandidates:(.nearMissCandidates[0:8]),carbonmark,goldStandard,klimaX402}' sourcing-status.json
-          fi
+          echo '=== X402 STATUS ==='
+          jq -c . x402-status.json 2>/dev/null || cat x402-status.json
 
-          echo '=== PROVIDER STATUS ==='
-          for f in gold-standard-status x402-status carbonmark-status; do
-            echo "--- $f"
-            jq -c . "$f.json" 2>/dev/null || cat "$f.json" 2>/dev/null || true
-          done
+          echo '=== VERIFIED COMPENSATION @ 1 KG ==='
+          jq -c '{count:length,assets:[.[]|{id,registry,project_name,vintage,available_tons,min_order_kg,execution_mode,pricing_mode,sourcing_score,sourcing_tier,sourcing_executable,fractional_retirement_supported,retirement_granularity_kg,eligibilityDecision}]}' compensation-1kg.json 2>/dev/null || cat compensation-1kg.json
 
-          if jq -e 'type == "array"' compensation-assets.json >/dev/null 2>&1; then
-            echo '=== VERIFIED COMPENSATION ASSETS @ 1000 KG ==='
-            jq -c '{count:length,assets:[.[]|{id,registry,project_name,vintage,available_tons,min_order_kg,execution_mode,pricing_mode,sourcing_score,sourcing_tier,sourcing_executable,eligibilityDecision}]}' compensation-assets.json
-          fi
+          echo '=== VERIFIED COMPENSATION @ 1000 KG ==='
+          jq -c '{count:length,assisted:map(select(.execution_mode=="assisted"))|length,programmatic:map(select(.execution_mode=="programmatic"))|length,executable:map(select(.sourcing_executable==true))|length}' compensation-1000kg.json 2>/dev/null || cat compensation-1000kg.json
 
-          if jq -e 'type == "array"' assets.json >/dev/null 2>&1; then
-            echo '=== ASSET COUNTS BY SOURCE ==='
-            jq -c '{
-              total:length,
-              carbonmarkClassic:map(select((.source_reference // "")|startswith("carbonmark-")))|length,
-              klimaX402:map(select((.source_reference // "")|startswith("klima-x402-")))|length,
-              goldStandardMarketplace:map(select((.source_reference // "")|startswith("gold-standard-marketplace-")))|length,
-              regen:map(select((.source_reference // "")|startswith("regen-")))|length,
-              other:map(select(((.source_reference // "")|startswith("carbonmark-")|not) and ((.source_reference // "")|startswith("klima-x402-")|not) and ((.source_reference // "")|startswith("gold-standard-marketplace-")|not) and ((.source_reference // "")|startswith("regen-")|not)))|length
-            }' assets.json
-
-            echo '=== GOLD STANDARD CANDIDATES ==='
-            jq -c '[.[] | select((.source_reference // "")|startswith("gold-standard-marketplace-")) | {
-              id,project_name,vintage,available_tons,min_order_kg,source_price_usd_ton,availability_status,source_status,
-              claim_category,eligibility_status,source_unit_status,retirement_supported,beneficiary_retirement_supported,
-              registry_evidence_url,sourcing_score,sourcing_tier,sourcing_shelf,sourcing_executable,
-              catalogEnrichment:.monitor_details.catalogEnrichment,
-              riskFlags:.eligibility_risk_flags
-            }] | sort_by(-(.sourcing_score|tonumber? // 0)) | .[0:40]' assets.json
-          fi
+          echo '=== CFC ASSETS RAW ==='
+          jq -c '[.[] | select((.monitor_details.cfcEnrichment // null) != null) | {id,registry,project_name,source_reference,vintage,available_tons,min_order_kg,pricing_mode,availability_status,claim_category,eligibility_status,source_unit_status,retirement_supported,fractional_retirement_supported,retirement_granularity_kg,beneficiary_retirement_supported,sourcing_score,sourcing_tier,sourcing_shelf,sourcing_executable,cfcEnrichment:.monitor_details.cfcEnrichment,riskFlags:.eligibility_risk_flags}]' assets.json 2>/dev/null || true
 
       - name: Upload probe JSON
         if: always()
