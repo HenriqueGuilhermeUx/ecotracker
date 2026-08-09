@@ -94,6 +94,12 @@ services:
         value: "100"
       - key: KLIMA_X402_EXECUTION_ENABLED
         value: "false"
+      - key: GOLD_STANDARD_MARKETPLACE_BASE
+        value: https://marketplace.goldstandard.org
+      - key: GOLD_STANDARD_PUBLIC_API_BASE
+        value: https://public-api.goldstandard.org
+      - key: GOLD_STANDARD_PUBLISHED_PRODUCT_LIMIT
+        value: "100"
       - key: WOOVI_APP_ID
         sync: false
       - key: WOOVI_WEBHOOK_SECRET
