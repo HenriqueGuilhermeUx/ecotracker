@@ -13,7 +13,7 @@ async function synchronizeAndRank(forceCarbonmark = false) {
   const carbonmark = forceCarbonmark
     ? await refreshCarbonmarkAssets()
     : await refreshCarbonmarkIfStale();
-  const sourcing = await rankSourcingInventory();
+  const sourcing = await rankSourcingInventory(forceCarbonmark ? 0 : undefined);
   return { carbonmark, sourcing };
 }
 

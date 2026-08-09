@@ -17,6 +17,11 @@ type RankedAsset = {
   reasons: string[];
 };
 
+type SourcingBlocker = {
+  reason: string;
+  count: number;
+};
+
 export type SourcingSummary = {
   totalActiveAssets: number;
   verifiedCompensationAssets: number;
@@ -28,11 +33,16 @@ export type SourcingSummary = {
   needsReplenishment: boolean;
   needsFractionalSource: boolean;
   topVerifiedCandidates: Array<Record<string, unknown>>;
+  blockers: SourcingBlocker[];
+  nearMissCandidates: Array<Record<string, unknown>>;
   refreshedAt: string;
 };
 
-// Carbonmark.ts já protege o teto em 100. O problema anterior era o default de 30.
-// Esse default amplia a descoberta sem afrouxar a política de elegibilidade.
+let lastRankedAt = 0;
+let rankInFlight: Promise<SourcingSummary> | null = null;
+
+// Carbonmark.ts já protege o teto em 100. Esse default amplia discovery sem
+// afrouxar a política de elegibilidade. O render.yaml replica estes valores.
 export function configureSourcingDefaults(): void {
   if (!process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT) process.env.CARBONMARK_PUBLISHED_LISTING_LIMIT = "100";
   if (!process.env.ECOT_MIN_VERIFIED_OFFSET_ASSETS) process.env.ECOT_MIN_VERIFIED_OFFSET_ASSETS = "5";
@@ -143,7 +153,7 @@ function shelfPriority(shelf: SourcingShelf): number {
   return 2;
 }
 
-export async function rankSourcingInventory(): Promise<SourcingSummary> {
+async function executeRanking(): Promise<SourcingSummary> {
   const { rows } = await pool.query("SELECT * FROM monitored_assets WHERE active=TRUE");
   const ranked = rows.map((asset) => ({ asset, ranking: scoreSourcingAsset(asset) }))
     .sort((left, right) => {
@@ -158,64 +168,129 @@ export async function rankSourcingInventory(): Promise<SourcingSummary> {
       return leftPrice - rightPrice;
     });
 
-  let rank = 0;
-  for (const item of ranked) {
-    rank += 1;
-    const details = {
-      sourcingScore: item.ranking.score,
-      sourcingTier: item.ranking.tier,
-      sourcingShelf: item.ranking.shelf,
-      sourcingRank: rank,
-      sourcingExecutable: item.ranking.executable,
-      sourcingFractional: item.ranking.fractional,
-      sourcingReasons: item.ranking.reasons,
-      sourcingRankedAt: new Date().toISOString(),
-    };
+  if (ranked.length) {
+    const ids: number[] = [];
+    const scores: number[] = [];
+    const tiers: string[] = [];
+    const shelves: string[] = [];
+    const ranks: number[] = [];
+    const executables: boolean[] = [];
+
+    ranked.forEach((item, index) => {
+      ids.push(item.ranking.id);
+      scores.push(item.ranking.score);
+      tiers.push(item.ranking.tier);
+      shelves.push(item.ranking.shelf);
+      ranks.push(index + 1);
+      executables.push(item.ranking.executable);
+    });
+
+    // Uma única escrita para todo o inventário. O v1 fazia um UPDATE por ativo,
+    // o que criaria carga desnecessária no Postgres quando o catálogo crescesse.
     await pool.query(`
-      UPDATE monitored_assets SET
-        sourcing_score=$2,
-        sourcing_tier=$3,
-        sourcing_shelf=$4,
-        sourcing_rank=$5,
-        sourcing_executable=$6,
-        sourcing_checked_at=NOW(),
-        monitor_details=COALESCE(monitor_details,'{}'::jsonb) || $7::jsonb,
-        updated_at=updated_at
-      WHERE id=$1`,
-    [item.ranking.id, item.ranking.score, item.ranking.tier, item.ranking.shelf, rank,
-      item.ranking.executable, JSON.stringify(details)]);
+      UPDATE monitored_assets AS a SET
+        sourcing_score=r.score,
+        sourcing_tier=r.tier,
+        sourcing_shelf=r.shelf,
+        sourcing_rank=r.rank,
+        sourcing_executable=r.executable,
+        sourcing_checked_at=NOW()
+      FROM UNNEST(
+        $1::bigint[],
+        $2::numeric[],
+        $3::text[],
+        $4::text[],
+        $5::int[],
+        $6::boolean[]
+      ) AS r(id,score,tier,shelf,rank,executable)
+      WHERE a.id=r.id`,
+    [ids, scores, tiers, shelves, ranks, executables]);
   }
 
+  lastRankedAt = Date.now();
   return getSourcingSummary();
+}
+
+export function rankSourcingInventory(
+  maxAgeMs = Math.max(5_000, Number(process.env.ECOT_SOURCING_RANK_MAX_AGE_MS || 60_000)),
+): Promise<SourcingSummary> {
+  if (maxAgeMs > 0 && lastRankedAt && Date.now() - lastRankedAt < maxAgeMs) {
+    return getSourcingSummary();
+  }
+  if (!rankInFlight) {
+    rankInFlight = executeRanking().finally(() => { rankInFlight = null; });
+  }
+  return rankInFlight;
 }
 
 export async function getSourcingSummary(): Promise<SourcingSummary> {
   const target = Math.max(1, Number(process.env.ECOT_MIN_VERIFIED_OFFSET_ASSETS || 5));
-  const { rows } = await pool.query(`
-    SELECT
-      COUNT(*) FILTER (WHERE active=TRUE)::int AS total_active,
-      COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation')::int AS verified,
-      COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation' AND sourcing_executable=TRUE)::int AS executable,
-      COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation' AND fractional_retirement_supported=TRUE AND retirement_granularity_kg<=1)::int AS fractional,
-      COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='climate_contribution')::int AS contribution,
-      COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='restricted')::int AS restricted
-    FROM monitored_assets
-  `);
-  const counts = rows[0] || {};
-  const top = await pool.query(`
-    SELECT id,public_code,registry,project_name,source_reference,source_url,methodology,location,vintage,
-           available_tons,min_order_kg,claim_category,eligibility_status,registry_evidence_url,
-           retirement_supported,fractional_retirement_supported,retirement_granularity_kg,
-           sourcing_score,sourcing_tier,sourcing_shelf,sourcing_rank,sourcing_executable,
-           CASE WHEN source_price_usd_ton IS NULL THEN NULL
-             ELSE ROUND((((source_price_usd_ton*fx_brl_usd)*(1+service_margin_pct/100.0))+fixed_fee_brl)/1000.0,4)
-           END AS indicative_price_brl_kg
-    FROM monitored_assets
-    WHERE active=TRUE AND sourcing_shelf='verified_compensation'
-    ORDER BY sourcing_executable DESC,sourcing_score DESC,sourcing_rank ASC
-    LIMIT 12
-  `);
+  const [{ rows }, top, diagnosticRows] = await Promise.all([
+    pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE active=TRUE)::int AS total_active,
+        COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation')::int AS verified,
+        COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation' AND sourcing_executable=TRUE)::int AS executable,
+        COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='verified_compensation' AND fractional_retirement_supported=TRUE AND retirement_granularity_kg<=1)::int AS fractional,
+        COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='climate_contribution')::int AS contribution,
+        COUNT(*) FILTER (WHERE active=TRUE AND sourcing_shelf='restricted')::int AS restricted
+      FROM monitored_assets
+    `),
+    pool.query(`
+      SELECT id,public_code,registry,project_name,source_reference,source_url,methodology,location,vintage,
+             available_tons,min_order_kg,claim_category,eligibility_status,registry_evidence_url,
+             retirement_supported,fractional_retirement_supported,retirement_granularity_kg,
+             sourcing_score,sourcing_tier,sourcing_shelf,sourcing_rank,sourcing_executable,
+             CASE WHEN source_price_usd_ton IS NULL THEN NULL
+               ELSE ROUND((((source_price_usd_ton*fx_brl_usd)*(1+service_margin_pct/100.0))+fixed_fee_brl)/1000.0,4)
+             END AS indicative_price_brl_kg
+      FROM monitored_assets
+      WHERE active=TRUE AND sourcing_shelf='verified_compensation'
+      ORDER BY sourcing_executable DESC,sourcing_score DESC,sourcing_rank ASC
+      LIMIT 12
+    `),
+    pool.query(`
+      SELECT * FROM monitored_assets
+      WHERE active=TRUE
+      ORDER BY sourcing_score DESC,sourcing_rank ASC NULLS LAST
+      LIMIT 250
+    `),
+  ]);
 
+  const blockerCounts = new Map<string, number>();
+  const nearMissCandidates: Array<Record<string, unknown>> = [];
+
+  for (const asset of diagnosticRows.rows) {
+    const requestedKg = Math.max(1, numberValue(asset.min_order_kg) || 1000);
+    const offsetDecision = evaluateAssetEligibility(asset, "voluntary_offset", requestedKg);
+    if (!offsetDecision.allowed) {
+      blockerCounts.set(offsetDecision.reason, (blockerCounts.get(offsetDecision.reason) || 0) + 1);
+      if (nearMissCandidates.length < 12) {
+        nearMissCandidates.push({
+          id: asset.id,
+          publicCode: asset.public_code,
+          registry: asset.registry,
+          projectName: asset.project_name,
+          sourceReference: asset.source_reference,
+          vintage: asset.vintage,
+          availableTons: asset.available_tons,
+          minOrderKg: asset.min_order_kg,
+          sourcingScore: asset.sourcing_score,
+          sourcingTier: asset.sourcing_tier,
+          sourcingShelf: asset.sourcing_shelf,
+          riskFlags: riskFlags(asset.eligibility_risk_flags),
+          blocker: offsetDecision.reason,
+        });
+      }
+    }
+  }
+
+  const blockers = Array.from(blockerCounts.entries())
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason))
+    .slice(0, 12);
+
+  const counts = rows[0] || {};
   const verified = Number(counts.verified || 0);
   const fractional = Number(counts.fractional || 0);
   return {
@@ -229,6 +304,8 @@ export async function getSourcingSummary(): Promise<SourcingSummary> {
     needsReplenishment: verified < target,
     needsFractionalSource: fractional < 1,
     topVerifiedCandidates: top.rows,
+    blockers,
+    nearMissCandidates,
     refreshedAt: new Date().toISOString(),
   };
 }
