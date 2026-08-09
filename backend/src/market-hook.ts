@@ -22,6 +22,8 @@ import { registerSourcingRoutes } from "./sourcing-routes.js";
 import { registerSourcingAutopilotRoutes } from "./sourcing-autopilot-routes.js";
 import { initSourcingAutopilotDb, startSourcingAutopilot } from "./sourcing-autopilot.js";
 import { rankSourcingInventory } from "./sourcing-engine.js";
+import { initSupplyDeskDb } from "./supply-desk-db.js";
+import { registerSupplyDeskRoutes } from "./supply-desk-routes.js";
 import { enrichX402CfcIfStale, startX402CfcEnrichmentWorker } from "./x402-cfc-enrichment.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
@@ -56,6 +58,7 @@ if (!proto.__marketInstalled) {
     registerEligibilityRoutes(app);
     registerAssistedQuoteRoutes(app);
     registerAssistedSourcingOpsRoutes(app);
+    registerSupplyDeskRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
 
@@ -63,6 +66,7 @@ if (!proto.__marketInstalled) {
       .then(() => initEligibilityDb())
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
+      .then(() => initSupplyDeskDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
