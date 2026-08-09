@@ -74,6 +74,35 @@ jobs:
           }
           NODE
 
+      - name: PostgreSQL demand autopilot schema smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_ci
+          NODE_ENV: test
+          ECOT_DEMAND_AUTOPILOT_ENABLED: "false"
+        run: |
+          node --input-type=module <<'NODE'
+          import { pool } from './dist/db.js';
+          import { initDemandAutopilotDb } from './dist/demand-autopilot-db.js';
+          import { demandAutopilotStatus } from './dist/demand-autopilot.js';
+          try {
+            await initDemandAutopilotDb();
+            const status = await demandAutopilotStatus();
+            if (status.live !== false || status.databaseEnabled !== false) {
+              throw new Error(`Demand Autopilot deveria iniciar desligado: ${JSON.stringify(status)}`);
+            }
+            const columns = await pool.query(`
+              SELECT column_name FROM information_schema.columns
+              WHERE table_name='demand_opportunities'
+                AND column_name IN ('autopilot_key','autopilot_run_id','autopilot_metadata')
+              ORDER BY column_name`);
+            if (columns.rows.length !== 3) throw new Error('Colunas do Demand Autopilot ausentes em demand_opportunities');
+            console.log('Demand Autopilot DB smoke OK:', { live:status.live,columns:columns.rows.map((row) => row.column_name) });
+          } finally {
+            await pool.end();
+          }
+          NODE
+
       - name: PostgreSQL basket payment schema smoke
         working-directory: backend
         env:
