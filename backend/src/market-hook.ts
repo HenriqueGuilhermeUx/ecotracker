@@ -5,6 +5,8 @@ import { initEligibilityDb } from "./eligibility-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
 import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
+import { initAssistedSourcingDb } from "./assisted-sourcing-db.js";
+import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
@@ -32,7 +34,6 @@ if (!proto.__marketInstalled) {
   const original = proto.listen;
   proto.listen = function (this: unknown, ...args: unknown[]) {
     const app = this as Parameters<typeof registerMarketRoutes>[0];
-    // A rota enriquecida vem primeiro para retornar pagamentos, fulfillment e documentos.
     app.get("/api/market/quotes/:publicCode", async (req, res) => {
       try {
         const raw = req.params.publicCode;
@@ -47,30 +48,24 @@ if (!proto.__marketInstalled) {
       }
     });
     registerPrivacyRoutes(app);
-    // Carbonmark clássico é executável quando o quote real da fonte é travado.
     registerCarbonmarkRoutes(app);
-    // x402 amplia discovery; CFC preservation pode virar compensação assistida/fracionária.
     registerKlimaX402Routes(app);
-    // Gold Standard acrescenta ofertas comerciais reais; checkout continua assistido.
     registerGoldStandardRoutes(app);
-    // Sourcing e Autopilot ficam depois dos provedores e antes das rotas genéricas.
     registerSourcingRoutes(app);
     registerSourcingAutopilotRoutes(app);
-    // Toda cotação passa primeiro pela política de elegibilidade.
     registerEligibilityRoutes(app);
-    // Fontes quote/indicative/manual podem registrar demanda, nunca cobrança automática.
     registerAssistedQuoteRoutes(app);
+    registerAssistedSourcingOpsRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
-    // quote_requests nasce em initMarketDb; a elegibilidade adiciona campos/snapshot;
-    // depois o módulo de comércio e o Autopilot adicionam suas estruturas operacionais.
+
     void initMarketDb()
       .then(() => initEligibilityDb())
       .then(() => initCommerceDb())
+      .then(() => initAssistedSourcingDb())
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
-        // Nenhum provedor impede o boot se estiver temporariamente indisponível.
         await Promise.allSettled([
           refreshCarbonmarkIfStale(0),
           refreshKlimaX402IfStale(0),
@@ -81,8 +76,6 @@ if (!proto.__marketInstalled) {
             if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason);
           });
         });
-        // Enriquecimentos rodam antes do primeiro ranking para que o shelf reflita
-        // o estado verificável mais recente de cada registry/provider.
         await Promise.allSettled([
           enrichGoldStandardIfStale(0),
           enrichX402CfcIfStale(0),
