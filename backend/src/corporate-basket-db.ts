@@ -153,5 +153,24 @@ export async function initCorporateBasketDb(): Promise<void> {
     CREATE TRIGGER guard_basket_asset_reservation
       BEFORE INSERT OR UPDATE OF status,reserved_kg,expires_at,asset_id ON corporate_basket_reservations
       FOR EACH ROW EXECUTE FUNCTION ecotracker_guard_basket_asset_reservation();
+
+    CREATE OR REPLACE FUNCTION ecotracker_guard_reserved_basket_leg_mutation()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      basket_state VARCHAR(40);
+    BEGIN
+      SELECT status INTO basket_state FROM corporate_baskets WHERE id=NEW.basket_id;
+      IF basket_state='reserved' THEN
+        RAISE EXCEPTION 'Release basket reservations before changing a confirmed leg';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS guard_reserved_basket_leg_mutation ON corporate_basket_legs;
+    CREATE TRIGGER guard_reserved_basket_leg_mutation
+      BEFORE UPDATE OF source_cost_brl,source_reference,source_available_kg,source_evidence_url,quote_expires_at,asset_id,requested_kg
+      ON corporate_basket_legs
+      FOR EACH ROW EXECUTE FUNCTION ecotracker_guard_reserved_basket_leg_mutation();
   `);
 }
