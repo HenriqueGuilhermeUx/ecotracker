@@ -3,11 +3,11 @@ import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { pool } from "./db.js";
 import { corporateBasketPaymentStatus } from "./corporate-basket-payment-db.js";
+import { reconcileCorporateBasketPaymentApproved } from "./corporate-basket-payment-reconciliation.js";
 import {
   createCorporateBasketCheckout,
   fetchMercadoPagoPayment,
   getCorporateBasketPayment,
-  markCorporateBasketPaymentApproved,
   parseBasketExternalReference,
 } from "./corporate-basket-payment.js";
 
@@ -88,7 +88,7 @@ export function registerCorporateBasketPaymentWebhookRoutes(app: Application) {
     if (!charge) return res.status(400).json({ error:"charge ausente" });
     const pix = body.pix && typeof body.pix === "object" ? body.pix as Record<string, unknown> : {};
     try {
-      const result = await markCorporateBasketPaymentApproved({
+      const result = await reconcileCorporateBasketPaymentApproved({
         basketCode,
         provider:"woovi",
         providerReference:String(charge.identifier || charge.transactionID || rawReference),
@@ -120,7 +120,7 @@ export function registerCorporateBasketPaymentWebhookRoutes(app: Application) {
       }
       const feeDetails = Array.isArray(payment.fee_details) ? payment.fee_details as Array<Record<string, unknown>> : [];
       const fee = feeDetails.reduce((sum,item) => sum+(Number(item.amount)||0),0);
-      const result = await markCorporateBasketPaymentApproved({
+      const result = await reconcileCorporateBasketPaymentApproved({
         basketCode,
         provider:"mercadopago",
         providerReference:paymentId,
