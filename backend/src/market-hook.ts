@@ -27,6 +27,7 @@ import { initSourcingAutopilotDb, startSourcingAutopilot } from "./sourcing-auto
 import { rankSourcingInventory } from "./sourcing-engine.js";
 import { initSupplyDeskDb } from "./supply-desk-db.js";
 import { registerSupplyDeskRoutes } from "./supply-desk-routes.js";
+import { registerVerraSupplyScoutRoutes } from "./verra-supply-scout.js";
 import { enrichX402CfcIfStale, startX402CfcEnrichmentWorker } from "./x402-cfc-enrichment.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
@@ -63,6 +64,7 @@ if (!proto.__marketInstalled) {
     registerAssistedSourcingOpsRoutes(app);
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
+    registerVerraSupplyScoutRoutes(app);
     registerDemandDeskRoutes(app);
     registerCommerceRoutes(app);
     registerMarketRoutes(app);
