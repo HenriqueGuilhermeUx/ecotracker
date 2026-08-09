@@ -37,6 +37,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Frontend API proxy smoke check
+        run: |
+          test -f frontend/dist/_redirects
+          grep -F '/api/*  https://ecotracker-api-cik7.onrender.com/api/:splat  200!' frontend/dist/_redirects
+          grep -F 'ecotracker-api-cik7.onrender.com/api' frontend/src/api.ts
+          grep -F '/api/*' netlify.toml
+
       - name: Mobile install
         working-directory: mobile
         run: npm install --silent
