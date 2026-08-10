@@ -18,6 +18,8 @@ import { initDemandSupplyRfqDb } from "./demand-supply-rfq-db.js";
 import { registerDemandSupplyRfqRoutes } from "./demand-supply-rfq-routes.js";
 import { initSupplyOutreachDb } from "./supply-outreach-db.js";
 import { registerSupplyOutreachRoutes } from "./supply-outreach-routes.js";
+import { initSupplyIntakeDb } from "./supply-intake-db.js";
+import { registerSupplyIntakeRoutes } from "./supply-intake-routes.js";
 import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
 import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
@@ -89,6 +91,7 @@ if (!proto.__marketInstalled) {
     registerDemandAutopilotRoutes(app);
     registerDemandSupplyRfqRoutes(app);
     registerSupplyOutreachRoutes(app);
+    registerSupplyIntakeRoutes(app);
     registerCommercialOutreachRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
@@ -107,6 +110,7 @@ if (!proto.__marketInstalled) {
       .then(() => initDemandAutopilotDb())
       .then(() => initDemandSupplyRfqDb())
       .then(() => initSupplyOutreachDb())
+      .then(() => initSupplyIntakeDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
