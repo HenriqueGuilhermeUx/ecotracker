@@ -46,9 +46,9 @@ async function seed(){
   return {opp,rfq,selection,evidence,source};
 }
 
-async function prepare(seed){
-  const intake=await createSupplyIntakeFromSelection({selectionId:Number(seed.selection.id),createdBy:"Distribution Smoke"});
-  await updateSupplyIntake({reviewId:Number(intake.id),authorizedTonnes:10000,floorPriceUsdTonne:8.75,minOrderTonnes:1,batchReference:`BATCH-DIST-${tag}`,vintage:"2026",serialStart:`SERIAL-${tag}-1`,serialEnd:`SERIAL-${tag}-10000`,methodology:"VM0047",registryEvidenceUrl:seed.evidence,sourceUrl:seed.source,retirementSupported:true,beneficiaryRetirementSupported:true,fractionalRetirementSupported:true,retirementGranularityKg:1,commercialValidUntil:future,legalKycStatus:"approved",registryEvidenceStatus:"verified",commercialTermsStatus:"approved",reviewNote:"Diligência completa distribution smoke.",actor:"Distribution Smoke"});
+async function prepare(seedData){
+  const intake=await createSupplyIntakeFromSelection({selectionId:Number(seedData.selection.id),createdBy:"Distribution Smoke"});
+  await updateSupplyIntake({reviewId:Number(intake.id),authorizedTonnes:10000,floorPriceUsdTonne:8.75,minOrderTonnes:1,batchReference:`BATCH-DIST-${tag}`,vintage:"2026",serialStart:`SERIAL-${tag}-1`,serialEnd:`SERIAL-${tag}-10000`,methodology:"VM0047",registryEvidenceUrl:seedData.evidence,sourceUrl:seedData.source,retirementSupported:true,beneficiaryRetirementSupported:true,fractionalRetirementSupported:true,retirementGranularityKg:1,commercialValidUntil:future,legalKycStatus:"approved",registryEvidenceStatus:"verified",commercialTermsStatus:"approved",reviewNote:"Diligência completa distribution smoke.",actor:"Distribution Smoke"});
   await approveSupplyIntake({reviewId:Number(intake.id),approvedBy:"Distribution Smoke",note:"Aprovado"});
   const conversion=await convertApprovedSupplyIntake({reviewId:Number(intake.id),convertedBy:"Distribution Smoke"});
   await approveSupplyEligibility({intakeReviewId:Number(intake.id),reviewedBy:"Distribution Smoke",eligibilityBasis:"Registry, batch, serials, tradability, vintage e retirement verificados para distribuição comercial.",tradabilityConfirmed:true,riskFlags:[]});
@@ -60,7 +60,7 @@ async function expectError(fn,status){
 }
 
 async function run(){
-  await init();const seed=await seed();const {conversion}=await prepare(seed);
+  await init();const seedData=await seed();const {conversion}=await prepare(seedData);
   const inventoryId=Number(conversion.inventory.id);const mandateId=Number(conversion.mandate.id);const assetId=Number(conversion.monitoredAsset.id);
 
   assert.deepEqual(conversion.mandate.allowed_channels,["direct","otc"]);
