@@ -1,0 +1,44 @@
+name: EcoTracker Distribution Orchestrator Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  distribution-orchestrator:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_distribution
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_distribution"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Run Distribution Orchestrator smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_distribution
+          NODE_ENV: test
+          JWT_SECRET: distribution-smoke-secret
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+          ECOT_DISTRIBUTION_MARKUP_PCT: "15"
+          CARBONMARK_ORDER_EXECUTION_ENABLED: "false"
+        run: node scripts/distribution-orchestrator-smoke.mjs
