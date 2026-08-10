@@ -2,6 +2,7 @@ import type { Application, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { carbonmarkStatus, createCarbonmarkQuote, refreshCarbonmarkAssets, refreshCarbonmarkIfStale } from "./carbonmark.js";
+import { carbonmarkOrderExecutionStatus } from "./commerce-providers.js";
 import { pool } from "./db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
 import { priceFromSourceCost, publicPricingPolicy } from "./pricing-policy.js";
@@ -51,9 +52,25 @@ export function registerCarbonmarkRoutes(app: Application) {
     try {
       const refresh = await refreshCarbonmarkIfStale();
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...carbonmarkStatus(), refresh, pricingPolicy: publicPricingPolicy() });
+      res.json({
+        ...carbonmarkStatus(),
+        refresh,
+        execution: carbonmarkOrderExecutionStatus(),
+        pricingPolicy: publicPricingPolicy(),
+        apiContract: {
+          stableVersion: "v18",
+          sellerListingOrders: true,
+          shadowQuotes: true,
+          automatedSellerListingCreation: false,
+          note: "A API estável documentada compra/aposenta seller listings. Supply próprio permanece em onboarding/listing externo até existir contrato oficial de criação de listing.",
+        },
+      });
     } catch (error) {
-      res.status(503).json({ ...carbonmarkStatus(), error: error instanceof Error ? error.message : "Carbonmark indisponível" });
+      res.status(503).json({
+        ...carbonmarkStatus(),
+        execution: carbonmarkOrderExecutionStatus(),
+        error: error instanceof Error ? error.message : "Carbonmark indisponível",
+      });
     }
   });
 
@@ -61,14 +78,15 @@ export function registerCarbonmarkRoutes(app: Application) {
     try {
       const result = await refreshCarbonmarkAssets();
       res.setHeader("Cache-Control", "no-store");
-      res.json({ ...result, status: carbonmarkStatus() });
+      res.json({ ...result, status: carbonmarkStatus(), execution: carbonmarkOrderExecutionStatus() });
     } catch (error) {
-      res.status(503).json({ error: error instanceof Error ? error.message : "Falha ao sincronizar Carbonmark", status: carbonmarkStatus() });
+      res.status(503).json({ error: error instanceof Error ? error.message : "Falha ao sincronizar Carbonmark", status: carbonmarkStatus(), execution: carbonmarkOrderExecutionStatus() });
     }
   });
 
   // Carbonmark precisa travar o custo da fonte em /quotes antes de apresentar o
-  // preço final ao cliente. Outros ativos seguem para a rota normal via next().
+  // preço final ao cliente. Criar quote NÃO cria order nem aposenta crédito.
+  // O POST /orders só é alcançável posteriormente se o gate de execução estiver live.
   app.post("/api/market/quotes", async (req: Request, res: Response, next: NextFunction) => {
     const parsed = quoteSchema.safeParse(req.body);
     if (!parsed.success) return next();
@@ -101,8 +119,6 @@ export function registerCarbonmarkRoutes(app: Application) {
       const fx = Number(asset.fx_brl_usd || 5.5);
       if (!Number.isFinite(fx) || fx <= 0) throw new Error("Câmbio BRL/USD indisponível");
 
-      // Carbonmark devolve cost_usdc para a quantidade inteira solicitada. Esse é
-      // o custo executável que entra no ledger, em vez de estimar pelo card.
       const sourceCostBrl = sourceQuote.costUsdc * fx;
       const priced = priceFromSourceCost({
         sourceCostBrl,
@@ -114,10 +130,12 @@ export function registerCarbonmarkRoutes(app: Application) {
       const taxPct = Math.max(0, numEnv("ECOT_TAX_RESERVE_PCT", 0));
       const taxReserve = Number((priced.finalTotalBrl * taxPct / 100).toFixed(2));
       const netProfit = Number((priced.serviceRevenueBrl - taxReserve).toFixed(2));
+      const execution = carbonmarkOrderExecutionStatus();
       const snapshot = {
         pricingMode: "carbonmark_locked_quote",
         sourceProvider: "carbonmark",
         carbonmarkEnvironment: carbonmarkStatus().environment,
+        carbonmarkStableApiVersion: "v18",
         carbonmarkQuoteUuid: sourceQuote.uuid,
         assetPriceSourceId: sourceQuote.assetPriceSourceId,
         quantityTonnes: sourceQuote.quantityTonnes,
@@ -127,6 +145,7 @@ export function registerCarbonmarkRoutes(app: Application) {
         markupTier: priced.tier,
         serviceRevenueBrl: priced.serviceRevenueBrl,
         fixedFeeBrl: Number(asset.fixed_fee_brl || 0),
+        orderExecutionLiveAtQuote: execution.live,
         capturedAt: new Date().toISOString(),
       };
 
@@ -151,10 +170,14 @@ export function registerCarbonmarkRoutes(app: Application) {
         ...rows[0],
         checkoutReady: true,
         sourceProvider: "carbonmark",
+        shadowQuote: true,
+        orderExecutionLive: execution.live,
         claimCategory: asset.claim_category,
         pricing: { markupPct: priced.tier.markupPct, minimumServiceFeeBrl: priced.tier.minimumServiceFeeBrl, tier: priced.tier.key },
         asset: { id: asset.id, registry: asset.registry, projectName: asset.project_name },
-        message: `Cotação Carbonmark travada por ${ttlMinutes} minutos. Preço final inclui a fonte executável e o serviço EcoTracker.`,
+        message: execution.live
+          ? `Cotação Carbonmark travada por ${ttlMinutes} minutos. Order execution está explicitamente habilitada.`
+          : `Cotação Carbonmark travada por ${ttlMinutes} minutos em modo seguro. POST /orders permanece bloqueado pelo gate de execução.`,
       });
     } catch (error) {
       const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 0;
