@@ -1,0 +1,251 @@
+name: EcoTracker Execution Readiness Final Gate
+
+on:
+  push:
+    branches: [agent/execution-readiness-gate-v1]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  actions: read
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_final_gate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_final_gate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: HenriqueGuilhermeUx/ecotracker
+      BRANCH: agent/execution-readiness-gate-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/execution-readiness-gate-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+
+      - name: Stabilize on latest branch head
+        run: |
+          sleep 45
+          git fetch origin "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+          echo "TESTED_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Verify no architectural integration is missing
+        run: |
+          grep -F 'import { initExecutionReadinessDb } from "./execution-readiness-db.js";' backend/src/market-hook.ts
+          grep -F 'import { registerExecutionReadinessRoutes } from "./execution-readiness-routes.js";' backend/src/market-hook.ts
+          grep -F 'import { startExecutionReadinessWorker } from "./execution-readiness.js";' backend/src/market-hook.ts
+          grep -F 'registerExecutionReadinessRoutes(app);' backend/src/market-hook.ts
+          grep -F '.then(() => initExecutionReadinessDb())' backend/src/market-hook.ts
+          grep -F 'startExecutionReadinessWorker();' backend/src/market-hook.ts
+          grep -R -l --include='*.tsx' '<ExecutionReadinessBoard' frontend/src | grep -v 'ExecutionReadinessBoard.tsx' | tee /tmp/execution-ui
+          test -s /tmp/execution-ui
+          grep -R -F 'import { ExecutionReadinessBoard } from "./ExecutionReadinessBoard";' frontend/src | grep -v 'ExecutionReadinessBoard.tsx'
+          matches="$(grep -R -l --include='*.ts' 'guardedExecutorFetch' backend/src | grep -v 'guarded-executor-fetch.ts' || true)"
+          test -n "$matches"
+          echo "$matches"
+          grep -F 'EXECUTION_ASSET_IDENTITY_REQUIRED' backend/src/guarded-executor-fetch.ts
+          grep -F '&&Boolean(row.sourcing_executable)' backend/src/execution-readiness.ts
+
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+
+      - name: Fresh DB helper and core climate/supply smokes
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+          NODE_ENV: test
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          JWT_SECRET: final-gate-secret
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+          ECOT_COMMERCIAL_OUTREACH_ENABLED: "false"
+          ECOT_COMMERCIAL_OUTREACH_ACK: DISABLED
+          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
+          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
+        run: |
+          set -euo pipefail
+          freshdb() {
+            local db="$1"
+            dropdb -h 127.0.0.1 -U postgres --if-exists "$db"
+            createdb -h 127.0.0.1 -U postgres "$db"
+            export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/$db"
+          }
+          run_named() {
+            local db="$1"; local script="$2"
+            test -f "backend/scripts/$script"
+            freshdb "$db"
+            echo "=== $script ==="
+            (cd backend && node "scripts/$script")
+          }
+          run_named final_eligibility eligibility-review-smoke.mjs
+          run_named final_supply_eligibility supply-eligibility-smoke.mjs
+          run_named final_supply_intake supply-intake-smoke.mjs
+          run_named final_market_maker market-maker-rfq-smoke.mjs
+          run_named final_demand demand-autopilot-smoke.mjs
+          run_named final_commercial commercial-outreach-smoke.mjs
+          if test -f backend/scripts/supply-outreach-smoke.mjs; then run_named final_supply_outreach supply-outreach-smoke.mjs; fi
+
+      - name: Execution Readiness lifecycle and network boundary
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+          NODE_ENV: test
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          JWT_SECRET: final-gate-secret
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: |
+          set -euo pipefail
+          dropdb -h 127.0.0.1 -U postgres --if-exists final_execution
+          createdb -h 127.0.0.1 -U postgres final_execution
+          export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/final_execution"
+          cd backend
+          node scripts/execution-readiness-smoke.mjs
+          node scripts/guarded-executor-fetch-smoke.mjs
+
+      - name: Verify Supply Eligibility is linked to generic ledger
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+          NODE_ENV: test
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: |
+          set -euo pipefail
+          dropdb -h 127.0.0.1 -U postgres --if-exists final_supply_link
+          createdb -h 127.0.0.1 -U postgres final_supply_link
+          export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/final_supply_link"
+          (cd backend && node scripts/supply-eligibility-smoke.mjs)
+          psql -h 127.0.0.1 -U postgres -d final_supply_link -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE r RECORD;
+          BEGIN
+            SELECT s.asset_eligibility_review_id,a.status,a.proposed_sha256,a.applied_sha256,m.claim_category,
+                   m.eligibility_status,m.sourcing_shelf,m.sourcing_executable
+              INTO r
+              FROM supply_eligibility_reviews s
+              JOIN asset_eligibility_reviews a ON a.id=s.asset_eligibility_review_id
+              JOIN monitored_assets m ON m.id=s.monitored_asset_id
+              ORDER BY s.id DESC LIMIT 1;
+            IF r.asset_eligibility_review_id IS NULL THEN RAISE EXCEPTION 'generic eligibility ledger link missing'; END IF;
+            IF r.status <> 'approved' THEN RAISE EXCEPTION 'generic review not approved'; END IF;
+            IF char_length(r.proposed_sha256) <> 64 OR char_length(r.applied_sha256) <> 64 THEN RAISE EXCEPTION 'eligibility SHA invalid'; END IF;
+            IF r.claim_category <> 'voluntary_offset' OR r.eligibility_status <> 'eligible' OR r.sourcing_shelf <> 'verified_compensation' THEN RAISE EXCEPTION 'claim-ready state invalid'; END IF;
+            IF r.sourcing_executable IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'climate eligibility must not enable execution'; END IF;
+          END $$;
+          SQL
+
+      - name: Corporate E2E regression when script is present
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+          NODE_ENV: test
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          JWT_SECRET: final-gate-secret
+          CORPORATE_BASKET_PAYMENT_ENABLED: "false"
+          CORPORATE_BASKET_PAYMENT_ACK: DISABLED
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: |
+          set -euo pipefail
+          script="$(find backend/scripts -maxdepth 1 -type f \( -name '*corporate*e2e*.mjs' -o -name '*corporate*smoke*.mjs' \) | sort | head -1 || true)"
+          if test -n "$script"; then
+            dropdb -h 127.0.0.1 -U postgres --if-exists final_corporate
+            createdb -h 127.0.0.1 -U postgres final_corporate
+            export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/final_corporate"
+            node "$script"
+          else
+            echo 'Corporate dedicated script not found; dedicated repository workflow remains authoritative.'
+          fi
+
+      - name: Frontend install and build
+        working-directory: frontend
+        run: npm install --silent && npm run build
+
+      - name: Mobile install, typecheck and Android bundle
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: https://ecotracker-api-cik7.onrender.com/api
+        run: |
+          npm install --silent
+          npm run typecheck -- --pretty false
+          npx expo export --platform android --output-dir dist
+
+      - name: Ensure branch did not move during validation
+        run: |
+          git fetch origin "$BRANCH"
+          LATEST="$(git rev-parse "origin/$BRANCH")"
+          test "$LATEST" = "$TESTED_HEAD" || {
+            echo "Branch moved during validation: tested=$TESTED_HEAD latest=$LATEST"
+            exit 1
+          }
+
+      - name: Wait for other checks on tested head
+        env:
+          HEAD_SHA: ${{ env.TESTED_HEAD }}
+        run: |
+          python3 <<'PY'
+          import json, os, subprocess, time
+          repo=os.environ['REPO']; sha=os.environ['HEAD_SHA']
+          deadline=time.time()+900
+          while True:
+            raw=subprocess.check_output(['gh','api',f'repos/{repo}/commits/{sha}/check-runs','--paginate'],text=True)
+            data=json.loads(raw)
+            runs=[r for r in data.get('check_runs',[]) if r.get('name')!='finalize' and 'Temporary' not in r.get('name','')]
+            bad=[r for r in runs if r.get('status')=='completed' and r.get('conclusion') not in ('success','skipped','neutral')]
+            pending=[r for r in runs if r.get('status')!='completed']
+            print('checks',len(runs),'pending',[r.get('name') for r in pending],'bad',[(r.get('name'),r.get('conclusion')) for r in bad])
+            if bad:
+              raise SystemExit('Another PR check failed on the tested head')
+            if len(runs)>=6 and not pending:
+              break
+            if time.time()>deadline:
+              raise SystemExit('Timed out waiting for PR checks')
+            time.sleep(10)
+          PY
+
+      - name: Remove all temporary workflows and this finalizer
+        run: |
+          rm -f .github/workflows/temp-execution-readiness-bootstrap.yml
+          rm -f .github/workflows/temp-execution-readiness-stale-fix.yml
+          rm -f .github/workflows/temp-execution-readiness-ui.yml
+          rm -f .github/workflows/temp-guard-executor-fetch.yml
+          rm -f .github/workflows/temp-executor-identity-hardening.yml
+          rm -f .github/workflows/temp-execution-ready-flag-hardening.yml
+          rm -f .github/workflows/execution-readiness-finalize.yml
+          git config user.name "EcoTracker CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Remover workflows temporários do Execution Readiness"
+            git push origin HEAD:"$BRANCH"
+          fi
+          echo "MERGE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Squash merge PR 64 after all gates
+        env:
+          HEAD_SHA: ${{ env.MERGE_HEAD }}
+        run: |
+          gh pr merge 64 --repo "$REPO" --squash --match-head-commit "$HEAD_SHA" --subject "Criar Execution Readiness Gate para supply-intake"
