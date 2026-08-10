@@ -204,7 +204,7 @@ export async function approveExecutionReadinessReview(input:{reviewId:number;rev
     authorizationTtlHours:Number(review.authorization_ttl_hours),sourceAdapter:review.source_adapter,retirementAdapter:review.retirement_adapter});
   if(!pre.ready)throw Object.assign(new Error(`Execution Readiness bloqueada: ${pre.reasons.join("; ")}`),{status:409,preview:pre});
   const reviewer=actor(input.reviewedBy);const validUntil=new Date(Date.now()+Number(review.authorization_ttl_hours)*3600_000);
-  return withTransaction(async client=>{
+  const transactionResult=await withTransaction(async client=>{
     const lockedReview=(await client.query(`SELECT * FROM asset_execution_readiness_reviews WHERE id=$1 FOR UPDATE`,[review.id])).rows[0];
     if(!lockedReview||lockedReview.status!=="pending")throw Object.assign(new Error("Execution Readiness Review já foi decidida"),{status:409});
     const locked=await executionBundle(Number(review.asset_id),client as unknown as Queryable);if(!locked)throw Object.assign(new Error("Ativo não encontrado"),{status:404});
@@ -212,7 +212,7 @@ export async function approveExecutionReadinessReview(input:{reviewId:number;rev
     if(hash(baseState(locked))!==lockedReview.base_fingerprint||currentConfig.fingerprint!==lockedReview.config_fingerprint){
       const stale=(await client.query(`UPDATE asset_execution_readiness_reviews SET status='stale',stale_at=NOW(),updated_at=NOW() WHERE id=$1 RETURNING *`,[review.id])).rows[0];
       await event(client,{assetId:Number(review.asset_id),reviewId:Number(review.id),type:"execution_review_stale",actor:reviewer,payload:{reason:"state_or_config_changed_after_probe"}});
-      throw Object.assign(new Error("Execution Readiness Review ficou obsoleta após os probes"),{status:409,review:stale});
+      return{stale:true,review:stale};
     }
     const authorization=(await client.query(`INSERT INTO asset_execution_authorizations(
       asset_id,review_id,status,execution_mode,source_adapter,retirement_adapter,supplier_settlement_mode,proof_sla_hours,
@@ -237,6 +237,10 @@ export async function approveExecutionReadinessReview(input:{reviewId:number;rev
       payload:{appliedSha256:appliedSha,validUntil:authorization.valid_until,configFingerprint:lockedReview.config_fingerprint}});
     return{review:approved,authorization,asset,preview:pre,alreadyApproved:false};
   });
+  if("stale" in transactionResult&&transactionResult.stale){
+    throw Object.assign(new Error("Execution Readiness Review ficou obsoleta após os probes"),{status:409,review:transactionResult.review});
+  }
+  return transactionResult;
 }
 
 export async function rejectExecutionReadinessReview(input:{reviewId:number;reason:string;reviewedBy?:string|null}){
