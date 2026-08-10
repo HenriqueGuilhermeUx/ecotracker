@@ -7,6 +7,7 @@ export async function initSupplyEligibilityDb(): Promise<void> {
       public_code UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
       intake_review_id BIGINT NOT NULL UNIQUE REFERENCES supply_intake_reviews(id) ON DELETE RESTRICT,
       monitored_asset_id BIGINT NOT NULL UNIQUE REFERENCES monitored_assets(id) ON DELETE RESTRICT,
+      asset_eligibility_review_id BIGINT UNIQUE REFERENCES asset_eligibility_reviews(id) ON DELETE RESTRICT,
       rfq_id BIGINT NOT NULL REFERENCES market_maker_rfqs(id) ON DELETE RESTRICT,
       opportunity_id BIGINT NOT NULL REFERENCES demand_opportunities(id) ON DELETE RESTRICT,
       status VARCHAR(30) NOT NULL CHECK (status IN ('approved','restricted')),
@@ -28,6 +29,26 @@ export async function initSupplyEligibilityDb(): Promise<void> {
         vintage_policy_override=FALSE OR NULLIF(BTRIM(vintage_exception_reason),'') IS NOT NULL
       )
     );
+
+    ALTER TABLE supply_eligibility_reviews
+      ADD COLUMN IF NOT EXISTS asset_eligibility_review_id BIGINT;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='supply_eligibility_reviews_asset_eligibility_review_fk'
+      ) THEN
+        ALTER TABLE supply_eligibility_reviews
+          ADD CONSTRAINT supply_eligibility_reviews_asset_eligibility_review_fk
+          FOREIGN KEY(asset_eligibility_review_id)
+          REFERENCES asset_eligibility_reviews(id) ON DELETE RESTRICT;
+      END IF;
+    END $$;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS supply_eligibility_reviews_asset_review_uidx
+      ON supply_eligibility_reviews(asset_eligibility_review_id)
+      WHERE asset_eligibility_review_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS supply_eligibility_events (
       id BIGSERIAL PRIMARY KEY,
