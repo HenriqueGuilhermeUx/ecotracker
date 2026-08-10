@@ -4,6 +4,7 @@ import { requireAdmin } from "./auth.js";
 import { pool } from "./db.js";
 import { assetProjection } from "./market-db.js";
 import { evaluateAssetEligibility, normalizeClaimPurpose } from "./eligibility-policy.js";
+import { directMutationRequiresLedger, type EligibilityProposal } from "./eligibility-review.js";
 
 const fail = (res: Response, error: unknown) =>
   res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
@@ -142,10 +143,27 @@ export function registerEligibilityRoutes(app: Application) {
     } catch (error) { fail(res, error); }
   });
 
+  // PATCH legado permanece disponível para manutenção técnica de ativos ainda restritos/contribuição.
+  // Promoção a compensação verificada — e qualquer mutação de um ativo já verificado — exige
+  // uma Eligibility Review auditável com fingerprint, snapshot, SHA e decisão humana.
   app.patch("/api/admin/market/assets/:id/eligibility", requireAdmin, async (req: Request, res: Response) => {
     const parsed = reviewSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Revisão de elegibilidade inválida", details: parsed.error.flatten() });
     try {
+      const current = (await pool.query("SELECT * FROM monitored_assets WHERE id=$1", [req.params.id])).rows[0];
+      if (!current) return res.status(404).json({ error: "Ativo não encontrado" });
+      const { reviewNow: _reviewNow, ...proposal } = parsed.data;
+      if (directMutationRequiresLedger(current, proposal as EligibilityProposal)) {
+        return res.status(409).json({
+          error: "Ativos elegíveis para compensação exigem Eligibility Review auditável; crie e decida uma review em vez de promoção direta.",
+          code: "ELIGIBILITY_LEDGER_REQUIRED",
+          assetId: Number(current.id),
+          currentClaimCategory: current.claim_category,
+          currentEligibilityStatus: current.eligibility_status,
+          requiredFlow: "create_eligibility_review_then_approve",
+        });
+      }
+
       const own = (key: keyof typeof parsed.data) => Object.prototype.hasOwnProperty.call(parsed.data, key);
       const d = parsed.data;
       const { rows } = await pool.query(`
@@ -202,7 +220,6 @@ export function registerEligibilityRoutes(app: Application) {
           d.reviewNow,
         ],
       );
-      if (!rows[0]) return res.status(404).json({ error: "Ativo não encontrado" });
       res.json({
         ...rows[0],
         offsetDecision: evaluateAssetEligibility(rows[0], "voluntary_offset", Number(rows[0].min_order_kg || 1000)),
