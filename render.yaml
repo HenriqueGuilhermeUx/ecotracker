@@ -60,6 +60,8 @@ services:
         value: "15"
       - key: ECOT_MIN_FEE_10000_PLUS_BRL
         value: "0"
+      - key: ECOT_DISTRIBUTION_MARKUP_PCT
+        value: "15"
       - key: ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS
         value: "5"
       - key: ECOT_ELIGIBILITY_MAX_AGE_HOURS
@@ -91,11 +93,15 @@ services:
       - key: CARBONMARK_ENVIRONMENT
         value: sandbox
       - key: CARBONMARK_API_BASE
-        value: https://v19.api.carbonmark.com
+        value: https://v18.api.carbonmark.com
       - key: CARBONMARK_PUBLISHED_LISTING_LIMIT
         value: "100"
       - key: CARBONMARK_API_KEY
         sync: false
+      - key: CARBONMARK_ORDER_EXECUTION_ENABLED
+        value: "false"
+      - key: CARBONMARK_ORDER_EXECUTION_ACK
+        value: DISABLED
       - key: KLIMA_X402_BASE_URL
         value: https://x402.klimalabs.com
       - key: KLIMA_X402_PUBLISHED_CREDIT_LIMIT
@@ -127,11 +133,11 @@ services:
       - key: ECOT_COMMERCIAL_OUTREACH_ENABLED
         value: "false"
       - key: ECOT_COMMERCIAL_OUTREACH_ACK
-        value: "DISABLED"
+        value: DISABLED
       - key: ECOT_SUPPLY_OUTREACH_ENABLED
         value: "false"
       - key: ECOT_SUPPLY_OUTREACH_ACK
-        value: "DISABLED"
+        value: DISABLED
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
