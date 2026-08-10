@@ -1,0 +1,47 @@
+name: EcoTracker Guarded Executor Fetch Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  guarded-executor-fetch:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_guarded_executor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_guarded_executor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Seed and validate Execution Readiness lifecycle
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_guarded_executor
+          NODE_ENV: test
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: node scripts/execution-readiness-smoke.mjs
+      - name: Validate executor network boundary
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_guarded_executor
+          NODE_ENV: test
+        run: node scripts/guarded-executor-fetch-smoke.mjs
