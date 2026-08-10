@@ -58,6 +58,7 @@ export async function initSupplyIntakeDb(): Promise<void> {
           AND batch_reference IS NOT NULL
           AND vintage IS NOT NULL
           AND registry_evidence_url IS NOT NULL
+          AND commercial_valid_until IS NOT NULL
           AND retirement_supported=TRUE
           AND beneficiary_retirement_supported=TRUE
           AND approved_by IS NOT NULL
