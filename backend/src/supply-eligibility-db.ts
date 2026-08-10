@@ -29,6 +29,16 @@ export async function initSupplyEligibilityDb(): Promise<void> {
       )
     );
 
+    CREATE TABLE IF NOT EXISTS supply_eligibility_events (
+      id BIGSERIAL PRIMARY KEY,
+      event_key UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+      review_id BIGINT NOT NULL REFERENCES supply_eligibility_reviews(id) ON DELETE RESTRICT,
+      event_type VARCHAR(80) NOT NULL,
+      actor VARCHAR(255),
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE OR REPLACE FUNCTION ecotracker_guard_supply_eligibility_review_mutation()
     RETURNS TRIGGER AS $$
     BEGIN
@@ -45,5 +55,7 @@ export async function initSupplyEligibilityDb(): Promise<void> {
       ON supply_eligibility_reviews(status,reviewed_at DESC);
     CREATE INDEX IF NOT EXISTS supply_eligibility_reviews_rfq_idx
       ON supply_eligibility_reviews(rfq_id,reviewed_at DESC);
+    CREATE INDEX IF NOT EXISTS supply_eligibility_events_review_idx
+      ON supply_eligibility_events(review_id,created_at DESC);
   `);
 }
