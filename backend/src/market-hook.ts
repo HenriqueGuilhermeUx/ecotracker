@@ -34,6 +34,8 @@ import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
 import { initAssistedSourcingDb } from "./assisted-sourcing-db.js";
 import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
+import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
+import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
@@ -79,6 +81,7 @@ if (!proto.__marketInstalled) {
     });
     registerPrivacyRoutes(app);
     registerCarbonmarkRoutes(app);
+    registerCarbonmarkRailRoutes(app);
     registerKlimaX402Routes(app);
     registerGoldStandardRoutes(app);
     registerSourcingRoutes(app);
@@ -119,6 +122,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyIntakeDb())
       .then(() => initSupplyEligibilityDb())
       .then(() => initDistributionDb())
+      .then(() => initCarbonmarkRailDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())

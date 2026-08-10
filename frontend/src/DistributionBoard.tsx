@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { CarbonmarkRailPanel } from "./CarbonmarkRailPanel";
 import "./distribution-board.css";
 
 type Json=Record<string,any>;
@@ -23,17 +24,20 @@ export function DistributionBoard(){
   const activeListings=useMemo(()=>items.flatMap(item=>item.listings||[]).filter((listing:Json)=>listing.status==="active").length,[items]);
   const activeReservations=useMemo(()=>items.flatMap(item=>item.reservations||[]).length,[items]);
 
-  return <section className="desk-card distribution-board">
-    <header className="distribution-head"><div><span>DISTRIBUTION ORCHESTRATOR</span><h2>Claim-ready → Carbonmark / Regen / OTC</h2></div>
-      <div className="distribution-kpis"><b>{ready.length} lotes claim-ready</b><b>{tons(globalAvailable)} t globais</b><b>{activeListings} canais ativos</b><b>{activeReservations} reservas</b></div></header>
-    <div className="distribution-integrity"><strong>EXPOSIÇÃO MULTICANAL ≠ ESTOQUE MULTIPLICADO</strong><span>30.000 t anunciadas em Carbonmark, Regen e OTC continuam sendo 30.000 t econômicas — não 90.000. Toda reserva debita o saldo global único do Supply Desk.</span></div>
-    <div className="distribution-execution-warning"><b>PUBLICAR ≠ EXECUTAR</b><span>O Orchestrator v1 prepara e confirma exposição. Nenhum canal externo é marcado como publicação automática e eligibility não liga retirement programático.</span></div>
-    {message&&<div className="desk-notice">{message}</div>}
-    {loading?<div className="desk-loading">Carregando Distribution Desk...</div>:<div className="distribution-grid">
-      {items.map(item=><InventoryDistributionCard key={item.id} item={item} caps={caps} busy={busy} act={act}/>) }
-      {!items.length&&<div className="desk-empty">Nenhum inventário de Supply convertido ainda.</div>}
-    </div>}
-  </section>;
+  return <>
+    <section className="desk-card distribution-board">
+      <header className="distribution-head"><div><span>DISTRIBUTION ORCHESTRATOR</span><h2>Claim-ready → Carbonmark / Regen / OTC</h2></div>
+        <div className="distribution-kpis"><b>{ready.length} lotes claim-ready</b><b>{tons(globalAvailable)} t globais</b><b>{activeListings} canais ativos</b><b>{activeReservations} reservas</b></div></header>
+      <div className="distribution-integrity"><strong>EXPOSIÇÃO MULTICANAL ≠ ESTOQUE MULTIPLICADO</strong><span>30.000 t anunciadas em Carbonmark, Regen e OTC continuam sendo 30.000 t econômicas — não 90.000. Toda reserva debita o saldo global único do Supply Desk.</span></div>
+      <div className="distribution-execution-warning"><b>PUBLICAR ≠ EXECUTAR</b><span>O Orchestrator prepara e confirma exposição. Nenhum canal externo é marcado como publicação automática e eligibility não liga retirement programático.</span></div>
+      {message&&<div className="desk-notice">{message}</div>}
+      {loading?<div className="desk-loading">Carregando Distribution Desk...</div>:<div className="distribution-grid">
+        {items.map(item=><InventoryDistributionCard key={item.id} item={item} caps={caps} busy={busy} act={act}/>) }
+        {!items.length&&<div className="desk-empty">Nenhum inventário de Supply convertido ainda.</div>}
+      </div>}
+    </section>
+    <CarbonmarkRailPanel />
+  </>;
 }
 
 function InventoryDistributionCard({item,caps,busy,act}:{item:Json;caps:Json;busy:string;act:(key:string,fn:()=>Promise<any>,success:string)=>Promise<void>}){
