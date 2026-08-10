@@ -7,10 +7,10 @@ import {
   dispatchSupplyOutbox,
   listSupplyOutbox,
   listSupplySelections,
-  recordSupplyResponse,
   selectSupplyCandidate,
   supplyOutreachStatus,
 } from "./supply-outreach.js";
+import { recordSupplyResponse } from "./supply-outreach-response.js";
 
 const one = (value:string|string[]|undefined) => Array.isArray(value) ? value[0] : value || "";
 
