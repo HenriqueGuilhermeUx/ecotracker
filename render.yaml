@@ -128,6 +128,10 @@ services:
         value: "false"
       - key: ECOT_COMMERCIAL_OUTREACH_ACK
         value: "DISABLED"
+      - key: ECOT_SUPPLY_OUTREACH_ENABLED
+        value: "false"
+      - key: ECOT_SUPPLY_OUTREACH_ACK
+        value: "DISABLED"
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
