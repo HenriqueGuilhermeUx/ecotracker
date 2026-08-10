@@ -93,15 +93,13 @@ export async function initSupplyIntakeDb(): Promise<void> {
     CREATE OR REPLACE FUNCTION ecotracker_guard_approved_supply_intake_mutation()
     RETURNS TRIGGER AS $$
     BEGIN
-      IF OLD.status IN ('approved','converted') THEN
-        IF NEW.status = OLD.status
-           AND NEW.converted_at IS NOT DISTINCT FROM OLD.converted_at
-           AND NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
-          RETURN NEW;
-        END IF;
+      IF OLD.status='approved' THEN
         IF NEW.status='converted'
-           AND OLD.status='approved'
            AND NEW.converted_at IS NOT NULL
+           AND NEW.response_id IS NOT DISTINCT FROM OLD.response_id
+           AND NEW.selection_id IS NOT DISTINCT FROM OLD.selection_id
+           AND NEW.rfq_id IS NOT DISTINCT FROM OLD.rfq_id
+           AND NEW.lead_id IS NOT DISTINCT FROM OLD.lead_id
            AND NEW.registry IS NOT DISTINCT FROM OLD.registry
            AND NEW.registry_project_id IS NOT DISTINCT FROM OLD.registry_project_id
            AND NEW.project_name IS NOT DISTINCT FROM OLD.project_name
@@ -115,7 +113,10 @@ export async function initSupplyIntakeDb(): Promise<void> {
            AND NEW.serial_start IS NOT DISTINCT FROM OLD.serial_start
            AND NEW.serial_end IS NOT DISTINCT FROM OLD.serial_end
            AND NEW.methodology IS NOT DISTINCT FROM OLD.methodology
+           AND NEW.country IS NOT DISTINCT FROM OLD.country
+           AND NEW.region IS NOT DISTINCT FROM OLD.region
            AND NEW.registry_evidence_url IS NOT DISTINCT FROM OLD.registry_evidence_url
+           AND NEW.source_url IS NOT DISTINCT FROM OLD.source_url
            AND NEW.retirement_supported IS NOT DISTINCT FROM OLD.retirement_supported
            AND NEW.beneficiary_retirement_supported IS NOT DISTINCT FROM OLD.beneficiary_retirement_supported
            AND NEW.fractional_retirement_supported IS NOT DISTINCT FROM OLD.fractional_retirement_supported
@@ -124,11 +125,18 @@ export async function initSupplyIntakeDb(): Promise<void> {
            AND NEW.legal_kyc_status IS NOT DISTINCT FROM OLD.legal_kyc_status
            AND NEW.registry_evidence_status IS NOT DISTINCT FROM OLD.registry_evidence_status
            AND NEW.commercial_terms_status IS NOT DISTINCT FROM OLD.commercial_terms_status
+           AND NEW.review_note IS NOT DISTINCT FROM OLD.review_note
+           AND NEW.rejection_reason IS NOT DISTINCT FROM OLD.rejection_reason
+           AND NEW.approved_by IS NOT DISTINCT FROM OLD.approved_by
+           AND NEW.approved_at IS NOT DISTINCT FROM OLD.approved_at
            AND NEW.approval_snapshot IS NOT DISTINCT FROM OLD.approval_snapshot
-           AND NEW.approval_sha256 IS NOT DISTINCT FROM OLD.approval_sha256 THEN
+           AND NEW.approval_sha256 IS NOT DISTINCT FROM OLD.approval_sha256
+           AND NEW.metadata IS NOT DISTINCT FROM OLD.metadata THEN
           RETURN NEW;
         END IF;
         RAISE EXCEPTION 'approved_supply_intake_is_immutable';
+      ELSIF OLD.status='converted' THEN
+        RAISE EXCEPTION 'converted_supply_intake_is_immutable';
       END IF;
       RETURN NEW;
     END;
