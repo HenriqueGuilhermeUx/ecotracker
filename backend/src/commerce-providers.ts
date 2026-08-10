@@ -1,6 +1,7 @@
 import { executeCarbonmarkRetirement } from "./carbonmark.js";
 import { pool } from "./db.js";
 
+import { guardedExecutorFetch } from "./guarded-executor-fetch.js";
 type Buyer = {
   name: string;
   email: string;
@@ -50,7 +51,7 @@ export function carbonmarkOrderExecutionStatus() {
 }
 
 async function fetchJson(url: string, init: RequestInit, timeoutMs = 15000): Promise<Record<string, unknown>> {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const response = await guardedExecutorFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const text = await response.text();
   let data: Record<string, unknown> = {};
   try { data = text ? JSON.parse(text) as Record<string, unknown> : {}; }
