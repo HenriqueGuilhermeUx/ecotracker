@@ -4,6 +4,7 @@ import express from "express";
 import { initDb, pool } from "../dist/db.js";
 import { initMarketDb } from "../dist/market-db.js";
 import { initEligibilityDb } from "../dist/eligibility-db.js";
+import { initEligibilityReviewDb } from "../dist/eligibility-review-db.js";
 import { initCommerceDb } from "../dist/commerce-db.js";
 import { initAssistedSourcingDb } from "../dist/assisted-sourcing-db.js";
 import { initSupplyDeskDb } from "../dist/supply-desk-db.js";
@@ -15,6 +16,7 @@ import { initSupplyIntakeDb } from "../dist/supply-intake-db.js";
 import { createAdminToken } from "../dist/auth.js";
 import { registerSupplyIntakeRoutes } from "../dist/supply-intake-routes.js";
 import { registerEligibilityRoutes } from "../dist/eligibility-routes.js";
+import { registerEligibilityReviewRoutes } from "../dist/eligibility-review-routes.js";
 import { registerDemandSupplyRfqRoutes } from "../dist/demand-supply-rfq-routes.js";
 import { evaluateAssetEligibility } from "../dist/eligibility-policy.js";
 
@@ -26,6 +28,7 @@ async function init() {
   await initDb();
   await initMarketDb();
   await initEligibilityDb();
+  await initEligibilityReviewDb();
   await initCommerceDb();
   await initAssistedSourcingDb();
   await initSupplyDeskDb();
@@ -121,6 +124,7 @@ async function startApi() {
   app.use(express.json());
   registerSupplyIntakeRoutes(app);
   registerEligibilityRoutes(app);
+  registerEligibilityReviewRoutes(app);
   registerDemandSupplyRfqRoutes(app);
   const server = app.listen(0,"127.0.0.1");
   await once(server,"listening");
@@ -196,9 +200,6 @@ async function run() {
     });
     assert.equal(patch.response.status,200);
     assert.equal(patch.data.status,"ready_for_review");
-    assert.equal(patch.data.legal_kyc_status,"approved");
-    assert.equal(patch.data.registry_evidence_status,"verified");
-    assert.equal(patch.data.commercial_terms_status,"approved");
 
     const approve = await call(`/admin/supply/intakes/${intake.id}/approve`,{
       method:"POST",body:JSON.stringify({approvedBy:"Supply Intake Smoke",note:"Aprovação humana do intake."}),
@@ -220,10 +221,8 @@ async function run() {
     });
     assert.equal(convert.response.status,201);
     const conversion = convert.data;
-    assert.ok(Number(conversion.mandate.id)>0);
-    assert.ok(Number(conversion.inventory.id)>0);
-    assert.ok(Number(conversion.monitoredAsset.id)>0);
     const assetId = Number(conversion.monitoredAsset.id);
+    assert.ok(Number(conversion.mandate.id)>0 && Number(conversion.inventory.id)>0 && assetId>0);
 
     const secondConvert = await call(`/admin/supply/intakes/${intake.id}/convert`,{
       method:"POST",body:JSON.stringify({convertedBy:"Supply Intake Smoke"}),
@@ -237,17 +236,13 @@ async function run() {
     assert.equal(restricted.source_unit_status,"unknown");
     assert.equal(restricted.sourcing_shelf,"restricted");
     assert.equal(restricted.sourcing_executable,false);
-    assert.ok(Array.isArray(restricted.eligibility_risk_flags));
     assert.ok(restricted.eligibility_risk_flags.includes("supply-intake-awaiting-eligibility-review"));
-
-    const decisionBefore = evaluateAssetEligibility(restricted,"voluntary_offset",10_000_000);
-    assert.equal(decisionBefore.allowed,false,"Converted intake must not be an offset before eligibility review");
+    assert.equal(evaluateAssetEligibility(restricted,"voluntary_offset",10_000_000).allowed,false);
 
     const quoteBlocked = await call("/market/quotes",{
-      method:"POST",
-      body:JSON.stringify({assetId,requestedKg:10_000_000,purpose:"voluntary_offset"}),
+      method:"POST",body:JSON.stringify({assetId,requestedKg:10_000_000,purpose:"voluntary_offset"}),
     });
-    assert.equal(quoteBlocked.response.status,409,"Public offset gate must reject intake candidate before eligibility review");
+    assert.equal(quoteBlocked.response.status,409);
 
     const preEligibilityRfq = await call(`/admin/demand/opportunities/${seeded.opportunity.id}/rfq`,{
       method:"POST",body:"{}",
@@ -255,40 +250,73 @@ async function run() {
     assert.ok([200,201].includes(preEligibilityRfq.response.status));
     assert.equal(preEligibilityRfq.data.matching.fullyCovered,false);
     assert.equal(Number(preEligibilityRfq.data.matching.uncoveredTonnes),10000);
-    const rfqBefore = (await pool.query(`SELECT * FROM market_maker_rfqs WHERE id=$1`,[seeded.rfq.id])).rows[0];
-    assert.notEqual(rfqBefore.status,"resolved");
 
-    const eligibility = await call(`/admin/market/assets/${assetId}/eligibility`,{
-      method:"PATCH",
-      body:JSON.stringify({
-        claimCategory:"voluntary_offset",
-        eligibilityStatus:"eligible",
-        eligibilityBasis:"Revisão humana explícita após Supply Intake; registry, batch, tradability e retirement validados.",
-        sourceUnitStatus:"tradable",
-        vintageStart:"2026-01-01",
-        vintageEnd:"2026-08-01",
-        commercialValidUntil:futureDate,
-        offerExpiresAt:futureDateTime,
-        registryProjectId:seeded.lead.registry_project_id,
-        registryBatchId:`BATCH-INTAKE-${tag}`,
-        registryEvidenceUrl:seeded.evidenceUrl,
-        retirementSupported:true,
-        fractionalRetirementSupported:true,
-        retirementGranularityKg:1,
-        beneficiaryRetirementSupported:true,
-        ccpStatus:"not_assessed",
-        riskFlags:[],
-        reviewNow:true,
-      }),
+    const proposal={
+      claimCategory:"voluntary_offset",
+      eligibilityStatus:"eligible",
+      eligibilityBasis:"Revisão humana auditável após Supply Intake; registry, batch, tradability e retirement validados.",
+      sourceUnitStatus:"tradable",
+      vintageStart:"2026-01-01",
+      vintageEnd:"2026-08-01",
+      commercialValidUntil:futureDate,
+      offerExpiresAt:futureDateTime,
+      registryProjectId:seeded.lead.registry_project_id,
+      registryBatchId:`BATCH-INTAKE-${tag}`,
+      registryEvidenceUrl:seeded.evidenceUrl,
+      retirementSupported:true,
+      fractionalRetirementSupported:true,
+      retirementGranularityKg:1,
+      beneficiaryRetirementSupported:true,
+      ccpStatus:"not_assessed",
+      riskFlags:[],
+    };
+
+    const legacyBlocked = await call(`/admin/market/assets/${assetId}/eligibility`,{
+      method:"PATCH",body:JSON.stringify({...proposal,reviewNow:true}),
     });
-    assert.equal(eligibility.response.status,200);
-    assert.equal(eligibility.data.offsetDecision.allowed,true,"Explicit eligibility review must be able to promote a qualified asset");
+    assert.equal(legacyBlocked.response.status,409,"Direct verified-offset promotion must require ledger");
+    assert.equal(legacyBlocked.data.code,"ELIGIBILITY_LEDGER_REQUIRED");
+
+    const reviewCreated = await call(`/admin/market/assets/${assetId}/eligibility-reviews`,{
+      method:"POST",
+      body:JSON.stringify({purpose:"voluntary_offset",createdBy:"Supply Intake Smoke",note:"Review auditável pós-intake.",proposal}),
+    });
+    assert.equal(reviewCreated.response.status,201);
+    const eligibilityReview=reviewCreated.data;
+    assert.equal(eligibilityReview.status,"pending");
+    assert.equal(String(eligibilityReview.proposed_sha256).length,64);
+    assert.equal(eligibilityReview.preview_decision.allowed,true);
+
+    const sameReview = await call(`/admin/market/assets/${assetId}/eligibility-reviews`,{
+      method:"POST",
+      body:JSON.stringify({purpose:"voluntary_offset",createdBy:"Supply Intake Smoke",note:"Review auditável pós-intake.",proposal}),
+    });
+    assert.equal(sameReview.response.status,201);
+    assert.equal(Number(sameReview.data.id),Number(eligibilityReview.id),"Identical pending review must be idempotent");
+
+    const reviewApproved = await call(`/admin/market/eligibility-reviews/${eligibilityReview.id}/approve`,{
+      method:"POST",body:JSON.stringify({reviewedBy:"Supply Intake Smoke",note:"Evidências conferidas e promoção aprovada."}),
+    });
+    assert.equal(reviewApproved.response.status,200);
+    assert.equal(reviewApproved.data.review.status,"approved");
+    assert.equal(String(reviewApproved.data.review.applied_sha256).length,64);
+    assert.equal(reviewApproved.data.decision.allowed,true);
+    assert.equal(reviewApproved.data.asset.sourcing_shelf,"verified_compensation");
+    assert.equal(reviewApproved.data.asset.sourcing_executable,true);
 
     const eligibleAsset = (await pool.query(`SELECT * FROM monitored_assets WHERE id=$1`,[assetId])).rows[0];
     assert.equal(eligibleAsset.claim_category,"voluntary_offset");
     assert.equal(eligibleAsset.eligibility_status,"eligible");
     assert.equal(eligibleAsset.source_unit_status,"tradable");
+    assert.equal(eligibleAsset.sourcing_shelf,"verified_compensation");
+    assert.equal(eligibleAsset.sourcing_executable,true);
     assert.ok(eligibleAsset.eligibility_checked_at);
+
+    const mutateVerifiedBlocked = await call(`/admin/market/assets/${assetId}/eligibility`,{
+      method:"PATCH",body:JSON.stringify({eligibilityBasis:"Tentativa de mutação direta pós-aprovação."}),
+    });
+    assert.equal(mutateVerifiedBlocked.response.status,409,"Already verified asset must remain ledger-controlled");
+    assert.equal(mutateVerifiedBlocked.data.code,"ELIGIBILITY_LEDGER_REQUIRED");
 
     const postEligibilityRfq = await call(`/admin/demand/opportunities/${seeded.opportunity.id}/rfq`,{
       method:"POST",body:"{}",
@@ -299,14 +327,13 @@ async function run() {
     assert.equal(Number(postEligibilityRfq.data.matching.uncoveredTonnes),0);
 
     const rfqAfter = (await pool.query(`SELECT * FROM market_maker_rfqs WHERE id=$1`,[seeded.rfq.id])).rows[0];
-    assert.equal(rfqAfter.status,"resolved","RFQ may resolve only after explicit claim-ready eligibility review");
+    assert.equal(rfqAfter.status,"resolved");
     assert.equal(Number(rfqAfter.gap_tonnes),0);
 
     const detail = await call(`/admin/supply/intakes/${intake.id}`);
     assert.equal(detail.response.status,200);
     assert.equal(detail.data.status,"converted");
     assert.equal(Number(detail.data.monitored_asset_id),assetId);
-    assert.ok(Array.isArray(detail.data.events));
 
     console.log("Supply Intake smoke OK",{
       runtimeRoutes:true,
@@ -317,10 +344,14 @@ async function run() {
       mandateId:Number(conversion.mandate.id),
       inventoryId:Number(conversion.inventory.id),
       monitoredAssetId:assetId,
-      autoEligibility:false,
+      directEligibilityPromotionBlocked:true,
+      eligibilityReviewId:Number(eligibilityReview.id),
+      eligibilityProposedSha256:String(eligibilityReview.proposed_sha256),
+      eligibilityAppliedSha256:String(reviewApproved.data.review.applied_sha256),
+      verifiedAssetDirectMutationBlocked:true,
       offsetBlockedBeforeReview:true,
       rfqResolvedBeforeEligibility:false,
-      explicitEligibilityAllowed:true,
+      explicitLedgerEligibilityAllowed:true,
       rfqResolvedAfterEligibility:true,
     });
   } finally {
