@@ -20,6 +20,8 @@ import { initSupplyOutreachDb } from "./supply-outreach-db.js";
 import { registerSupplyOutreachRoutes } from "./supply-outreach-routes.js";
 import { initSupplyIntakeDb } from "./supply-intake-db.js";
 import { registerSupplyIntakeRoutes } from "./supply-intake-routes.js";
+import { initSupplyEligibilityDb } from "./supply-eligibility-db.js";
+import { registerSupplyEligibilityRoutes } from "./supply-eligibility-routes.js";
 import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
 import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
@@ -92,6 +94,7 @@ if (!proto.__marketInstalled) {
     registerDemandSupplyRfqRoutes(app);
     registerSupplyOutreachRoutes(app);
     registerSupplyIntakeRoutes(app);
+    registerSupplyEligibilityRoutes(app);
     registerCommercialOutreachRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
@@ -111,6 +114,7 @@ if (!proto.__marketInstalled) {
       .then(() => initDemandSupplyRfqDb())
       .then(() => initSupplyOutreachDb())
       .then(() => initSupplyIntakeDb())
+      .then(() => initSupplyEligibilityDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
