@@ -284,7 +284,7 @@ export async function executionReadinessForAsset(assetId:number){
   if(authorization?.status==="active"&&authorization.config_fingerprint!==currentConfig.fingerprint){
     await deactivateAuthorization(assetId,"revoked","executor_configuration_changed","execution-readiness-runtime");authorization={...authorization,status:"revoked"};
   }
-  const ready=authorization?.status==="active"&&new Date(authorization.valid_until).getTime()>Date.now();
+  const ready=authorization?.status==="active"&&new Date(authorization.valid_until).getTime()>Date.now()&&Boolean(row.sourcing_executable);
   if(!ready&&Boolean(row.sourcing_executable))await pool.query(`UPDATE monitored_assets SET sourcing_executable=FALSE,sourcing_checked_at=NOW(),updated_at=NOW() WHERE id=$1`,[assetId]);
   return{assetId,required:true,ready,authorization:authorization||null,configFingerprint:currentConfig.fingerprint,climateReviewId:row.climate_review_id,
     climateReviewAppliedSha256:row.climate_review_applied_sha256,sourcingExecutable:ready};
