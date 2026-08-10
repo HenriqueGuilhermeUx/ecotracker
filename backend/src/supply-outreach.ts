@@ -84,7 +84,7 @@ async function selectionBundle(client:pg.PoolClient|typeof pool,selectionId:numb
     LEFT JOIN supply_leads l ON l.id=s.supply_lead_id
     LEFT JOIN supply_inventory i ON i.id=s.supply_inventory_id
     WHERE s.id=$1
-    ${lock ? "FOR UPDATE OF s,r,c,l" : ""}`,[selectionId]);
+    ${lock ? "FOR UPDATE OF s,r,c" : ""}`,[selectionId]);
   return rows[0] || null;
 }
 
@@ -135,7 +135,7 @@ export async function selectSupplyCandidate(input:{
       JOIN market_maker_rfqs r ON r.id=c.rfq_id
       LEFT JOIN supply_leads l ON l.id=c.supply_lead_id
       WHERE c.id=$1 AND c.rfq_id=$2
-      FOR UPDATE OF c,r,l`,[input.candidateId,input.rfqId])).rows[0];
+      FOR UPDATE OF c,r`,[input.candidateId,input.rfqId])).rows[0];
     if (!candidate) throw Object.assign(new Error("Candidato de supply não encontrado neste RFQ"),{status:404});
     if (!["open","partially_sourced"].includes(String(candidate.rfq_status))) {
       throw Object.assign(new Error("RFQ não está aberto para seleção de fornecedor"),{status:409});
