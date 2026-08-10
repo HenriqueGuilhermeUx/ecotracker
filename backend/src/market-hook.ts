@@ -23,6 +23,8 @@ import { registerSupplyIntakeRoutes } from "./supply-intake-routes.js";
 import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
 import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
+import { initEligibilityReviewDb } from "./eligibility-review-db.js";
+import { registerEligibilityReviewRoutes } from "./eligibility-review-routes.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
 import { registerAcrSupplyScoutRoutes } from "./acr-supply-scout.js";
@@ -80,6 +82,7 @@ if (!proto.__marketInstalled) {
     registerSourcingRoutes(app);
     registerSourcingAutopilotRoutes(app);
     registerEligibilityRoutes(app);
+    registerEligibilityReviewRoutes(app);
     registerAssistedQuoteRoutes(app);
     registerAssistedSourcingOpsRoutes(app);
     registerSupplyDeskRoutes(app);
@@ -102,6 +105,7 @@ if (!proto.__marketInstalled) {
 
     void initMarketDb()
       .then(() => initEligibilityDb())
+      .then(() => initEligibilityReviewDb())
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
       .then(() => initSupplyDeskDb())
