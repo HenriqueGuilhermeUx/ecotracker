@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { SupplyEligibilityQueue } from "./SupplyEligibilityQueue";
+import { DistributionBoard } from "./DistributionBoard";
 import "./supply-intake.css";
 
 type Json = Record<string, any>;
@@ -71,6 +72,7 @@ export function SupplyIntakeBoard() {
       </>}
     </section>
     <SupplyEligibilityQueue />
+    <DistributionBoard />
   </>;
 }
 
