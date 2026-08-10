@@ -1,0 +1,74 @@
+name: EcoTracker Supply Eligibility Ledger Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  supply-eligibility-ledger:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecotracker_supply_eligibility_ledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecotracker_supply_eligibility_ledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Run original Supply Eligibility smoke
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_supply_eligibility_ledger
+          NODE_ENV: test
+          JWT_SECRET: supply-eligibility-ledger-smoke
+          ADMIN_EMAIL: carbon-desk@ecotracker.test
+          ECOT_MAX_OFFSET_VINTAGE_AGE_YEARS: "5"
+          ECOT_ELIGIBILITY_MAX_AGE_HOURS: "168"
+        run: node scripts/supply-eligibility-smoke.mjs
+      - name: Verify immutable ledger linkage and execution separation
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecotracker_supply_eligibility_ledger
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+          try {
+            const { rows } = await pool.query(`
+              SELECT s.id AS supply_review_id,s.asset_eligibility_review_id,
+                     a.status AS asset_review_status,a.proposed_sha256,a.applied_sha256,
+                     m.claim_category,m.eligibility_status,m.sourcing_shelf,m.sourcing_executable
+              FROM supply_eligibility_reviews s
+              JOIN asset_eligibility_reviews a ON a.id=s.asset_eligibility_review_id
+              JOIN monitored_assets m ON m.id=s.monitored_asset_id
+              ORDER BY s.id DESC LIMIT 1
+            `);
+            const row = rows[0];
+            if (!row) throw new Error('Supply eligibility review ausente');
+            if (!(Number(row.asset_eligibility_review_id) > 0)) throw new Error('Vínculo com Eligibility Ledger ausente');
+            if (row.asset_review_status !== 'approved') throw new Error(`Asset review status inválido: ${row.asset_review_status}`);
+            if (String(row.proposed_sha256 || '').length !== 64) throw new Error('Proposed SHA inválido');
+            if (String(row.applied_sha256 || '').length !== 64) throw new Error('Applied SHA inválido');
+            if (row.claim_category !== 'voluntary_offset' || row.eligibility_status !== 'eligible') throw new Error('Claim-ready não aplicado');
+            if (row.sourcing_shelf !== 'verified_compensation') throw new Error(`Shelf inválida: ${row.sourcing_shelf}`);
+            if (row.sourcing_executable !== false) throw new Error('Eligibility climática não pode autorizar execução programática');
+            console.log('Supply Eligibility -> Ledger linkage OK', row);
+          } finally {
+            await pool.end();
+          }
+          NODE
