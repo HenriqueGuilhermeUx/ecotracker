@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import LegacyApp from "./App";
-import { CarbonDesk } from "./CarbonDesk";
+import { CarbonDesk } from "./CarbonDeskV2";
 import { MarketCatalog } from "./MarketCatalog";
 import { MarketAdmin } from "./MarketAdmin";
 import "./market.css";
