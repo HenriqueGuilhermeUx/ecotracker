@@ -1,0 +1,38 @@
+name: Temporary Execution Ready Flag Hardening
+
+on:
+  push:
+    branches: [agent/execution-readiness-gate-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/execution-readiness-gate-v1
+          fetch-depth: 0
+      - name: Harden runtime readiness
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/execution-readiness.ts')
+          s=p.read_text()
+          old='''  const ready=authorization?.status==="active"&&new Date(authorization.valid_until).getTime()>Date.now();\n  if(!ready&&Boolean(row.sourcing_executable))await pool.query(`UPDATE monitored_assets SET sourcing_executable=FALSE,sourcing_checked_at=NOW(),updated_at=NOW() WHERE id=$1`,[assetId]);'''
+          new='''  const ready=authorization?.status==="active"&&new Date(authorization.valid_until).getTime()>Date.now()&&Boolean(row.sourcing_executable);\n  if(!ready&&Boolean(row.sourcing_executable))await pool.query(`UPDATE monitored_assets SET sourcing_executable=FALSE,sourcing_checked_at=NOW(),updated_at=NOW() WHERE id=$1`,[assetId]);'''
+          if s.count(old)!=1: raise SystemExit('Runtime ready anchor missing or duplicated')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Remove temporary workflow
+        run: rm .github/workflows/temp-execution-ready-flag-hardening.yml
+      - name: Commit hardening
+        run: |
+          git config user.name "EcoTracker CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/src/execution-readiness.ts .github/workflows/temp-execution-ready-flag-hardening.yml
+          git commit -m "Falhar fechado se executable for desligado"
+          git push origin HEAD:agent/execution-readiness-gate-v1
