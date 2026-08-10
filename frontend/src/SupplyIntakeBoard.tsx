@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { EligibilityReviewBoard } from "./EligibilityReviewBoard";
 import "./supply-intake.css";
 
 type Json = Record<string, any>;
@@ -44,30 +45,33 @@ export function SupplyIntakeBoard() {
   const reviewQueue=useMemo(()=>intakes.filter((i)=>["draft","ready_for_review","approved"].includes(String(i.status))),[intakes]);
   const converted=useMemo(()=>intakes.filter((i)=>i.status==="converted"),[intakes]);
 
-  return <section className="desk-card supply-intake-board">
-    <header className="intake-board-head">
-      <div><span>SUPPLY INTAKE GATE</span><h2>Seller-confirmed → elegibilidade</h2></div>
-      <div className="intake-head-counts"><b>{awaiting.length} aguardando intake</b><b>{reviewQueue.length} em revisão</b><b>{converted.length} convertidos</b></div>
-    </header>
-    <div className="intake-integrity"><strong>MANDATO ≠ OFFSET</strong><span>Intake aprovado cria mandato, inventário e um monitored candidate restrito. Claim de compensação continua dependendo de revisão explícita de elegibilidade.</span></div>
-    {message&&<div className="desk-notice">{message}</div>}
-    {loading?<div className="desk-loading">Carregando Supply Intake...</div>:<>
-      {awaiting.length>0&&<div className="intake-section"><h3>Seller-confirmed aguardando intake</h3><div className="intake-grid">{awaiting.map((selection)=><article className="intake-card" key={selection.id}>
-        <div className="intake-card-head"><div><b>{selection.supplier_name||selection.project_name}</b><small>{selection.registry} · {selection.project_name}</small></div><span className="intake-status positive">seller confirmed</span></div>
-        <div className="intake-metrics"><span><small>Confirmado</small><b>{tons(selection.confirmed_available_tonnes)} t</b></span><span><small>Preço</small><b>{selection.firm_price_usd_tonne?`US$ ${selection.firm_price_usd_tonne}/t`:"—"}</b></span><span><small>Retirement</small><b>{selection.retirement_supported?"sim":"não/n.d."}</b></span></div>
-        <button disabled={!!busy} onClick={()=>void act(`open-${selection.id}`,()=>api(`/admin/market-maker/supply-selections/${selection.id}/intake`,{method:"POST",body:JSON.stringify({createdBy:"Carbon Desk"})}),"Supply Intake aberto.")}>{busy===`open-${selection.id}`?"Abrindo...":"Abrir intake"}</button>
-      </article>)}</div></div>}
+  return <>
+    <section className="desk-card supply-intake-board">
+      <header className="intake-board-head">
+        <div><span>SUPPLY INTAKE GATE</span><h2>Seller-confirmed → elegibilidade</h2></div>
+        <div className="intake-head-counts"><b>{awaiting.length} aguardando intake</b><b>{reviewQueue.length} em revisão</b><b>{converted.length} convertidos</b></div>
+      </header>
+      <div className="intake-integrity"><strong>MANDATO ≠ OFFSET</strong><span>Intake aprovado cria mandato, inventário e um monitored candidate restrito. Claim de compensação continua dependendo de revisão explícita de elegibilidade.</span></div>
+      {message&&<div className="desk-notice">{message}</div>}
+      {loading?<div className="desk-loading">Carregando Supply Intake...</div>:<>
+        {awaiting.length>0&&<div className="intake-section"><h3>Seller-confirmed aguardando intake</h3><div className="intake-grid">{awaiting.map((selection)=><article className="intake-card" key={selection.id}>
+          <div className="intake-card-head"><div><b>{selection.supplier_name||selection.project_name}</b><small>{selection.registry} · {selection.project_name}</small></div><span className="intake-status positive">seller confirmed</span></div>
+          <div className="intake-metrics"><span><small>Confirmado</small><b>{tons(selection.confirmed_available_tonnes)} t</b></span><span><small>Preço</small><b>{selection.firm_price_usd_tonne?`US$ ${selection.firm_price_usd_tonne}/t`:"—"}</b></span><span><small>Retirement</small><b>{selection.retirement_supported?"sim":"não/n.d."}</b></span></div>
+          <button disabled={!!busy} onClick={()=>void act(`open-${selection.id}`,()=>api(`/admin/market-maker/supply-selections/${selection.id}/intake`,{method:"POST",body:JSON.stringify({createdBy:"Carbon Desk"})}),"Supply Intake aberto.")}>{busy===`open-${selection.id}`?"Abrindo...":"Abrir intake"}</button>
+        </article>)}</div></div>}
 
-      <div className="intake-section"><h3>Diligência e aprovação</h3><div className="intake-grid">{reviewQueue.map((intake)=><IntakeCard key={intake.id} intake={intake} busy={busy} act={act}/>)}{!reviewQueue.length&&<div className="desk-empty">Nenhum intake em revisão.</div>}</div></div>
+        <div className="intake-section"><h3>Diligência e aprovação</h3><div className="intake-grid">{reviewQueue.map((intake)=><IntakeCard key={intake.id} intake={intake} busy={busy} act={act}/>)}{!reviewQueue.length&&<div className="desk-empty">Nenhum intake em revisão.</div>}</div></div>
 
-      {converted.length>0&&<div className="intake-section"><h3>Convertidos — ainda sujeitos ao eligibility gate</h3><div className="intake-grid compact">{converted.slice(0,20).map((intake)=><article className="intake-card converted" key={intake.id}>
-        <div className="intake-card-head"><div><b>{intake.supplier_name}</b><small>{intake.registry} · {intake.project_name}</small></div><span className="intake-status">{statusLabel(intake.monitored_eligibility_status||"under_review")}</span></div>
-        <div className="intake-metrics"><span><small>Autorizado</small><b>{tons(intake.authorized_tonnes)} t</b></span><span><small>Mandato</small><b>#{intake.mandate_id}</b></span><span><small>Ativo</small><b>#{intake.monitored_asset_id}</b></span></div>
-        <div className="intake-claim-state">Claim: <b>{statusLabel(intake.monitored_claim_category||"climate_contribution")}</b> · shelf <b>{statusLabel(intake.monitored_sourcing_shelf||"restricted")}</b> · executable <b>{intake.monitored_sourcing_executable?"sim":"não"}</b></div>
-        <a className="intake-link" href="#market-admin">Revisar elegibilidade no admin de ativos →</a>
-      </article>)}</div></div>}
-    </>}
-  </section>;
+        {converted.length>0&&<div className="intake-section"><h3>Convertidos — ainda sujeitos ao eligibility gate</h3><div className="intake-grid compact">{converted.slice(0,20).map((intake)=><article className="intake-card converted" key={intake.id}>
+          <div className="intake-card-head"><div><b>{intake.supplier_name}</b><small>{intake.registry} · {intake.project_name}</small></div><span className="intake-status">{statusLabel(intake.monitored_eligibility_status||"under_review")}</span></div>
+          <div className="intake-metrics"><span><small>Autorizado</small><b>{tons(intake.authorized_tonnes)} t</b></span><span><small>Mandato</small><b>#{intake.mandate_id}</b></span><span><small>Ativo</small><b>#{intake.monitored_asset_id}</b></span></div>
+          <div className="intake-claim-state">Claim: <b>{statusLabel(intake.monitored_claim_category||"climate_contribution")}</b> · shelf <b>{statusLabel(intake.monitored_sourcing_shelf||"restricted")}</b> · executable <b>{intake.monitored_sourcing_executable?"sim":"não"}</b></div>
+          <button className="intake-link" onClick={()=>document.getElementById("eligibility-review-board")?.scrollIntoView({behavior:"smooth",block:"start"})}>Abrir Eligibility Review Ledger ↓</button>
+        </article>)}</div></div>}
+      </>}
+    </section>
+    <EligibilityReviewBoard />
+  </>;
 }
 
 function IntakeCard({intake,busy,act}:{intake:Json;busy:string;act:(key:string,fn:()=>Promise<unknown>,success:string)=>Promise<void>}) {
