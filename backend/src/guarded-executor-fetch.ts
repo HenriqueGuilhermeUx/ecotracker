@@ -88,11 +88,6 @@ async function resolveAssetId(body:Json|null){
   return null;
 }
 
-function explicitlySupplyIntake(body:Json|null){
-  const ref=text(pick(body,["sourceReference","source_reference"]));
-  return Boolean(ref?.startsWith("supply-intake:"));
-}
-
 export async function guardedExecutorFetch(input:Parameters<typeof fetch>[0],init?:Parameters<typeof fetch>[1]){
   const url=requestUrl(input);
   const kind=executorKind(url);
@@ -102,8 +97,8 @@ export async function guardedExecutorFetch(input:Parameters<typeof fetch>[0],ini
   const assetId=await resolveAssetId(body);
   if(assetId){
     await assertAssetExecutionReady(assetId);
-  }else if(explicitlySupplyIntake(body)){
-    throw Object.assign(new Error("Não foi possível resolver o ativo supply-intake antes da chamada ao executor"),{
+  }else{
+    throw Object.assign(new Error("Não foi possível resolver o ativo antes da chamada ao executor genérico"),{
       status:409,code:"EXECUTION_ASSET_IDENTITY_REQUIRED",executorKind:kind,
     });
   }
