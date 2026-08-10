@@ -1,0 +1,58 @@
+name: Temporary Execution Readiness Bootstrap
+
+on:
+  push:
+    branches: [agent/execution-readiness-gate-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/execution-readiness-gate-v1
+          fetch-depth: 0
+      - name: Patch market hook with exact guards
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/market-hook.ts')
+          s=p.read_text()
+          replacements=[
+            (
+              'import { registerSupplyEligibilityRoutes } from "./supply-eligibility-routes.js";\n',
+              'import { registerSupplyEligibilityRoutes } from "./supply-eligibility-routes.js";\nimport { initExecutionReadinessDb } from "./execution-readiness-db.js";\nimport { registerExecutionReadinessRoutes } from "./execution-readiness-routes.js";\nimport { startExecutionReadinessWorker } from "./execution-readiness.js";\n'
+            ),
+            (
+              '    registerSupplyEligibilityRoutes(app);\n',
+              '    registerSupplyEligibilityRoutes(app);\n    registerExecutionReadinessRoutes(app);\n'
+            ),
+            (
+              '      .then(() => initSupplyEligibilityDb())\n',
+              '      .then(() => initSupplyEligibilityDb())\n      .then(() => initExecutionReadinessDb())\n'
+            ),
+            (
+              '        startDemandAutopilotWorker();\n',
+              '        startDemandAutopilotWorker();\n        startExecutionReadinessWorker();\n'
+            ),
+          ]
+          for old,new in replacements:
+            count=s.count(old)
+            if count != 1:
+              raise SystemExit(f'Expected exactly one bootstrap anchor, found {count}: {old!r}')
+            s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Remove temporary workflow
+        run: rm .github/workflows/temp-execution-readiness-bootstrap.yml
+      - name: Commit bootstrap
+        run: |
+          git config user.name "EcoTracker CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/src/market-hook.ts .github/workflows/temp-execution-readiness-bootstrap.yml
+          git commit -m "Integrar Execution Readiness Gate ao bootstrap"
+          git push origin HEAD:agent/execution-readiness-gate-v1
