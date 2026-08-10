@@ -31,6 +31,24 @@ export type ExecutorResult = {
 const appUrl = () => (process.env.PUBLIC_APP_URL || "https://ecotracker10.netlify.app").replace(/\/$/, "");
 const apiUrl = () => (process.env.PUBLIC_API_URL || "https://ecotracker-api-cik7.onrender.com").replace(/\/$/, "");
 
+export function carbonmarkOrderExecutionStatus() {
+  const configured = Boolean(process.env.CARBONMARK_API_KEY?.trim());
+  const enabled = process.env.CARBONMARK_ORDER_EXECUTION_ENABLED === "true";
+  const acknowledged = process.env.CARBONMARK_ORDER_EXECUTION_ACK === "ENABLE_LIVE_CARBONMARK_RETIREMENTS";
+  const environment = String(process.env.CARBONMARK_ENVIRONMENT || "sandbox").toLowerCase();
+  return {
+    configured,
+    enabled,
+    acknowledged,
+    live: configured && enabled && acknowledged,
+    environment,
+    stableApiVersion: "v18",
+    quoteMode: configured ? "shadow_quote_available" : "provider_not_configured",
+    orderMode: configured && enabled && acknowledged ? "live_order_enabled" : "blocked",
+    requiredAck: "ENABLE_LIVE_CARBONMARK_RETIREMENTS",
+  };
+}
+
 async function fetchJson(url: string, init: RequestInit, timeoutMs = 15000): Promise<Record<string, unknown>> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const text = await response.text();
@@ -151,7 +169,20 @@ async function executeCarbonmarkSource(payload: Record<string, unknown>): Promis
   if (!sourceReference.startsWith("carbonmark-")) throw new Error("Fonte Carbonmark inválida");
   const quoteUuid = String(payload.sourceOrderId || "");
   if (!quoteUuid) return { configured: true, status: "blocked", metadata: { reason: "Carbonmark quote UUID ausente" } };
-  if (!process.env.CARBONMARK_API_KEY) return { configured: false, status: "blocked", metadata: { reason: "CARBONMARK_API_KEY não configurada" } };
+
+  const gate = carbonmarkOrderExecutionStatus();
+  if (!gate.configured) return { configured: false, status: "blocked", metadata: { reason: "CARBONMARK_API_KEY não configurada", gate } };
+  if (!gate.live) {
+    return {
+      configured: true,
+      status: "blocked",
+      metadata: {
+        reason: "Execução Carbonmark bloqueada pelo gate. Shadow quote continua permitida; POST /orders exige flag + ACK explícito.",
+        gate,
+        quoteUuid,
+      },
+    };
+  }
 
   const result = await executeCarbonmarkRetirement({
     quoteUuid,
@@ -162,6 +193,7 @@ async function executeCarbonmarkSource(payload: Record<string, unknown>): Promis
   const metadata: Record<string, unknown> = {
     provider: "carbonmark",
     status: result.status,
+    gate,
     viewRetirementUrl: result.viewRetirementUrl,
     certificateUrl: result.certificateUrl,
     provenanceUrl: result.provenanceUrl,
