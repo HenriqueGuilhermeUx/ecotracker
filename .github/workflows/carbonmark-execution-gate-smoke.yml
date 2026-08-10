@@ -1,0 +1,23 @@
+name: EcoTracker Carbonmark Execution Gate Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  carbonmark-execution-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Install and build backend
+        working-directory: backend
+        run: npm install --include=dev --silent && npm run check -- --pretty false && npm run build
+      - name: Prove Carbonmark double gate without provider calls
+        working-directory: backend
+        env:
+          NODE_ENV: test
+        run: node scripts/carbonmark-execution-gate-smoke.mjs
