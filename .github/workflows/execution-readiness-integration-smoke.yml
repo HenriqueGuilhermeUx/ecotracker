@@ -1,0 +1,28 @@
+name: EcoTracker Execution Readiness Integration Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify bootstrap integration
+        run: |
+          grep -F 'import { initExecutionReadinessDb } from "./execution-readiness-db.js";' backend/src/market-hook.ts
+          grep -F 'import { registerExecutionReadinessRoutes } from "./execution-readiness-routes.js";' backend/src/market-hook.ts
+          grep -F 'import { startExecutionReadinessWorker } from "./execution-readiness.js";' backend/src/market-hook.ts
+          grep -F 'registerExecutionReadinessRoutes(app);' backend/src/market-hook.ts
+          grep -F '.then(() => initExecutionReadinessDb())' backend/src/market-hook.ts
+          grep -F 'startExecutionReadinessWorker();' backend/src/market-hook.ts
+      - name: Verify network runtime guard is wired
+        run: |
+          matches="$(grep -R -l --include='*.ts' 'guardedExecutorFetch' backend/src | grep -v 'guarded-executor-fetch.ts' || true)"
+          test -n "$matches"
+          echo "$matches"
+          for file in $matches; do
+            grep -F 'import { guardedExecutorFetch } from "./guarded-executor-fetch.js";' "$file"
+          done
