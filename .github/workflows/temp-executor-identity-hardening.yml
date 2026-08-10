@@ -1,0 +1,42 @@
+name: Temporary Executor Identity Hardening
+
+on:
+  push:
+    branches: [agent/execution-readiness-gate-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/execution-readiness-gate-v1
+          fetch-depth: 0
+      - name: Harden guarded executor fetch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/guarded-executor-fetch.ts')
+          s=p.read_text()
+          old='''function explicitlySupplyIntake(body:Json|null){\n  const ref=text(pick(body,["sourceReference","source_reference"]));\n  return Boolean(ref?.startsWith("supply-intake:"));\n}\n\n'''
+          if s.count(old)!=1: raise SystemExit('explicit supply helper anchor missing')
+          s=s.replace(old,'',1)
+          old2='''  if(assetId){\n    await assertAssetExecutionReady(assetId);\n  }else if(explicitlySupplyIntake(body)){\n    throw Object.assign(new Error("Não foi possível resolver o ativo supply-intake antes da chamada ao executor"),{\n      status:409,code:"EXECUTION_ASSET_IDENTITY_REQUIRED",executorKind:kind,\n    });\n  }\n  return fetch(input,init);'''
+          new2='''  if(assetId){\n    await assertAssetExecutionReady(assetId);\n  }else{\n    throw Object.assign(new Error("Não foi possível resolver o ativo antes da chamada ao executor genérico"),{\n      status:409,code:"EXECUTION_ASSET_IDENTITY_REQUIRED",executorKind:kind,\n    });\n  }\n  return fetch(input,init);'''
+          if s.count(old2)!=1: raise SystemExit('guard branch anchor missing')
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          PY
+      - name: Remove temporary workflow
+        run: rm .github/workflows/temp-executor-identity-hardening.yml
+      - name: Commit hardening
+        run: |
+          git config user.name "EcoTracker CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/src/guarded-executor-fetch.ts .github/workflows/temp-executor-identity-hardening.yml
+          git commit -m "Exigir identidade de ativo no executor genérico"
+          git push origin HEAD:agent/execution-readiness-gate-v1
