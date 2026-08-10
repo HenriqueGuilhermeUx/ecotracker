@@ -5,6 +5,7 @@ import { evaluateAssetEligibility } from "./eligibility-policy.js";
 export const distributionChannels=["carbonmark","regen","otc","direct","toucan","other"] as const;
 export type DistributionChannel=typeof distributionChannels[number];
 type Json=Record<string,unknown>;
+type QueryClient={query:(text:string,values?:unknown[])=>Promise<{rows:any[]}>};
 
 const num=(value:unknown,fallback=0)=>{const parsed=Number(value);return Number.isFinite(parsed)?parsed:fallback;};
 const bool=(value:unknown)=>value===true||value==="true"||value===1||value==="1";
@@ -32,8 +33,8 @@ async function expireReservations(){
     WHERE status IN ('active','pending') AND reserved_until IS NOT NULL AND reserved_until<NOW()`);
 }
 
-async function contextForInventory(client:{query:(text:string,values?:unknown[])=>Promise<{rows:any[]}>},inventoryId:number,lock=false){
-  const lockSql=lock?"FOR UPDATE OF i,m,ma":"";
+async function contextForInventory(client:QueryClient,inventoryId:number,lock=false){
+  const lockSql=lock?"FOR UPDATE OF i,m":"";
   const {rows}=await client.query(`
     SELECT i.*,m.supplier_name,m.status AS mandate_status,m.floor_price_usd_tonne,m.allowed_channels,m.valid_until AS mandate_valid_until,
       l.project_name,l.country,l.region,
@@ -49,7 +50,12 @@ async function contextForInventory(client:{query:(text:string,values?:unknown[])
     LEFT JOIN supply_eligibility_reviews er ON er.intake_review_id=conv.review_id
     LEFT JOIN monitored_assets ma ON ma.id=conv.monitored_asset_id
     WHERE i.id=$1 ${lockSql}`,[inventoryId]);
-  return rows[0]||null;
+  const row=rows[0]||null;
+  if(lock&&row?.monitored_asset_id){
+    const asset=(await client.query(`SELECT to_jsonb(ma) AS asset FROM monitored_assets ma WHERE ma.id=$1 FOR UPDATE`,[row.monitored_asset_id])).rows[0]?.asset;
+    if(asset) row.asset=asset;
+  }
+  return row;
 }
 
 function claimDecision(row:any){
@@ -65,7 +71,7 @@ export async function distributionDesk(){
   const caps=distributionChannelCapabilities();
   const items=[] as any[];
   for(const record of rows){
-    const row=await contextForInventory(pool,Number(record.id));
+    const row=await contextForInventory(pool as unknown as QueryClient,Number(record.id));
     if(!row) continue;
     const listings=(await pool.query(`SELECT * FROM supply_channel_listings WHERE inventory_id=$1 ORDER BY channel`,[record.id])).rows;
     const deployments=(await pool.query(`SELECT * FROM distribution_deployments WHERE inventory_id=$1 ORDER BY revision DESC LIMIT 5`,[record.id])).rows;
@@ -113,7 +119,7 @@ export async function planDistribution(input:{inventoryId:number;channels:Distri
   const requested=normalizeChannels(input.channels);
   if(!requested.length) throw Object.assign(new Error("Selecione pelo menos um canal"),{status:400});
   return withTransaction(async client=>{
-    const row=await contextForInventory(client,input.inventoryId,true);
+    const row=await contextForInventory(client as unknown as QueryClient,input.inventoryId,true);
     if(!row) throw Object.assign(new Error("Inventário não encontrado"),{status:404});
     if(row.status!=="available") throw Object.assign(new Error("Inventário não está disponível para distribuição"),{status:409});
     if(row.mandate_status!=="active") throw Object.assign(new Error("Mandato do fornecedor não está ativo"),{status:409});
@@ -167,7 +173,7 @@ export async function activateDistributionChannel(input:{inventoryId:number;chan
   await expireReservations();
   const actor=actorName(input.actor);
   return withTransaction(async client=>{
-    const row=await contextForInventory(client,input.inventoryId,true);
+    const row=await contextForInventory(client as unknown as QueryClient,input.inventoryId,true);
     if(!row) throw Object.assign(new Error("Inventário não encontrado"),{status:404});
     const decision=claimDecision(row);
     if(!decision.allowed) throw Object.assign(new Error(`Inventário deixou de ser claim-ready: ${decision.reason}`),{status:409});
@@ -194,7 +200,7 @@ export async function reserveDistribution(input:{inventoryId:number;channel:Dist
   await expireReservations();
   const actor=actorName(input.actor);
   return withTransaction(async client=>{
-    const row=await contextForInventory(client,input.inventoryId,true);
+    const row=await contextForInventory(client as unknown as QueryClient,input.inventoryId,true);
     if(!row) throw Object.assign(new Error("Inventário não encontrado"),{status:404});
     const decision=claimDecision(row);
     if(!decision.allowed) throw Object.assign(new Error(`Inventário não é claim-ready: ${decision.reason}`),{status:409});
