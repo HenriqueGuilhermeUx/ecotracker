@@ -22,6 +22,8 @@ import { initSupplyIntakeDb } from "./supply-intake-db.js";
 import { registerSupplyIntakeRoutes } from "./supply-intake-routes.js";
 import { initSupplyEligibilityDb } from "./supply-eligibility-db.js";
 import { registerSupplyEligibilityRoutes } from "./supply-eligibility-routes.js";
+import { initDistributionDb } from "./distribution-db.js";
+import { registerDistributionRoutes } from "./distribution-routes.js";
 import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
 import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
@@ -95,6 +97,7 @@ if (!proto.__marketInstalled) {
     registerSupplyOutreachRoutes(app);
     registerSupplyIntakeRoutes(app);
     registerSupplyEligibilityRoutes(app);
+    registerDistributionRoutes(app);
     registerCommercialOutreachRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
     registerCorporateBasketPaymentRoutes(app);
@@ -115,6 +118,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyOutreachDb())
       .then(() => initSupplyIntakeDb())
       .then(() => initSupplyEligibilityDb())
+      .then(() => initDistributionDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
