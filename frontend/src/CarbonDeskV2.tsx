@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { MarketShell } from "./MarketShell";
+import { SupplyIntakeBoard } from "./SupplyIntakeBoard";
 import "./carbon-desk.css";
 import "./carbon-desk-supply.css";
 
@@ -178,6 +179,8 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
           <div className="desk-list">{supplySelections.slice(0,20).map((selection)=><SupplySelectionRow key={selection.id} selection={selection} busy={busy} onSubmit={(body)=>act(`response-${selection.id}`,()=>api(`/admin/market-maker/supply-selections/${selection.id}/response`,{method:"POST",body:JSON.stringify(body)}),"Resposta do fornecedor registrada como seller-confirmed.",openRfq?()=>inspectRfq(Number(openRfq.id)):undefined)} />)}{!supplySelections.length&&<Empty text="Nenhum fornecedor selecionado."/>}</div>
         </DeskCard>
       </div>
+
+      <SupplyIntakeBoard />
 
       <div className="desk-grid two">
         <DeskCard title="Outbox comprador" eyebrow="BUYER OUTREACH" count={buyerOutbox.length}><div className="desk-list">{buyerOutbox.slice(0,12).map((item)=><article className="desk-row outbox-row" key={item.id}><div className="row-main"><div><b>{item.company_name||item.recipient_name||item.recipient_email}</b><small>{item.recipient_email}</small></div><Status value={item.status}/></div><p>{item.subject}</p><footer><small>tentativas {n(item.attempts)}</small>{item.status==="ready"&&<button disabled={!buyerOutreach.live||!!busy} onClick={()=>void act(`send-buyer-${item.id}`,()=>api(`/admin/demand/outbox/${item.id}/dispatch`,{method:"POST",body:JSON.stringify({actor:"Carbon Desk"})}),"Proposta enviada ao comprador.")}>{buyerOutreach.live?"Enviar proposta":"Envio bloqueado"}</button>}</footer></article>)}{!buyerOutbox.length&&<Empty text="Nenhuma proposta no outbox."/>}</div></DeskCard>
