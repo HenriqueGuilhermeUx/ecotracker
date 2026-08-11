@@ -67,7 +67,7 @@ export async function runCarbonmarkSandboxCertification(input:{assetId:number;re
   const hash=sha256(snapshot);
   const inserted=(await pool.query(`
     INSERT INTO carbonmark_sandbox_certifications(monitored_asset_id,asset_price_source_id,requested_kg,quote_uuid,cost_usdc,beneficiary_name,retirement_message,status,provider_reference,retirement_id,retirement_tx_hash,retirement_url,certificate_url,provenance_url,executed_by,execution_snapshot,provider_snapshot,certification_sha256,completed_at)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18,CASE WHEN $8='completed' THEN NOW() ELSE NULL END)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8::varchar,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18,CASE WHEN $8::varchar='completed' THEN NOW() ELSE NULL END)
     ON CONFLICT(quote_uuid) DO NOTHING RETURNING *`,[
       asset.id,assetPriceSourceId,requestedKg,quote.uuid,quote.costUsdc,beneficiaryName,retirementMessage,order.status,
       order.reference,order.retirementId,order.txHash,order.viewRetirementUrl,order.certificateUrl,order.provenanceUrl,executedBy,
