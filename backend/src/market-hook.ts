@@ -36,6 +36,8 @@ import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-route
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
 import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
+import { initCarbonmarkSandboxCertificationDb } from "./carbonmark-sandbox-certification-db.js";
+import { registerCarbonmarkSandboxCertificationRoutes } from "./carbonmark-sandbox-certification-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
@@ -57,10 +59,7 @@ import { registerVerraSupplyScoutRoutes } from "./verra-supply-scout.js";
 import { enrichX402CfcIfStale, startX402CfcEnrichmentWorker } from "./x402-cfc-enrichment.js";
 import { startCommerceWorker } from "./commerce-service.js";
 
-const proto = express.application as unknown as {
-  listen: (...args: unknown[]) => unknown;
-  __marketInstalled?: boolean;
-};
+const proto = express.application as unknown as { listen: (...args: unknown[]) => unknown; __marketInstalled?: boolean; };
 
 if (!proto.__marketInstalled) {
   const original = proto.listen;
@@ -82,6 +81,7 @@ if (!proto.__marketInstalled) {
     registerPrivacyRoutes(app);
     registerCarbonmarkRoutes(app);
     registerCarbonmarkRailRoutes(app);
+    registerCarbonmarkSandboxCertificationRoutes(app);
     registerKlimaX402Routes(app);
     registerGoldStandardRoutes(app);
     registerSourcingRoutes(app);
@@ -123,6 +123,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyEligibilityDb())
       .then(() => initDistributionDb())
       .then(() => initCarbonmarkRailDb())
+      .then(() => initCarbonmarkSandboxCertificationDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
       .then(() => initCorporateBasketPaymentDb())
@@ -130,24 +131,13 @@ if (!proto.__marketInstalled) {
       .then(() => initPrivacyDb())
       .then(() => initSourcingAutopilotDb())
       .then(async () => {
-        await Promise.allSettled([
-          refreshCarbonmarkIfStale(0),
-          refreshKlimaX402IfStale(0),
-          refreshGoldStandardIfStale(0),
-        ]).then((results) => {
+        await Promise.allSettled([refreshCarbonmarkIfStale(0),refreshKlimaX402IfStale(0),refreshGoldStandardIfStale(0)]).then((results) => {
           const names = ["carbonmark", "klima-x402", "gold-standard"];
-          results.forEach((result, index) => {
-            if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason);
-          });
+          results.forEach((result, index) => { if (result.status === "rejected") console.warn(`[${names[index]}] initial refresh failed`, result.reason); });
         });
-        await Promise.allSettled([
-          enrichGoldStandardIfStale(0),
-          enrichX402CfcIfStale(0),
-        ]).then((results) => {
+        await Promise.allSettled([enrichGoldStandardIfStale(0),enrichX402CfcIfStale(0)]).then((results) => {
           const names = ["gold-standard", "x402-cfc"];
-          results.forEach((result, index) => {
-            if (result.status === "rejected") console.warn(`[${names[index]}] initial enrichment failed`, result.reason);
-          });
+          results.forEach((result, index) => { if (result.status === "rejected") console.warn(`[${names[index]}] initial enrichment failed`, result.reason); });
         });
         await rankSourcingInventory(0).catch((error) => console.warn("[sourcing] initial ranking failed", error));
         startGoldStandardEnrichmentWorker();
@@ -157,10 +147,7 @@ if (!proto.__marketInstalled) {
         startCommerceWorker();
         return original.apply(this, args);
       })
-      .catch((error) => {
-        console.error("[commerce] initialization failed", error);
-        process.exit(1);
-      });
+      .catch((error) => { console.error("[commerce] initialization failed", error); process.exit(1); });
     return this;
   };
   proto.__marketInstalled = true;

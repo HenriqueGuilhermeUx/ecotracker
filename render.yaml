@@ -102,6 +102,10 @@ services:
         value: "false"
       - key: CARBONMARK_ORDER_EXECUTION_ACK
         value: DISABLED
+      - key: CARBONMARK_SANDBOX_E2E_ENABLED
+        value: "false"
+      - key: CARBONMARK_SANDBOX_E2E_ACK
+        value: DISABLED
       - key: KLIMA_X402_BASE_URL
         value: https://x402.klimalabs.com
       - key: KLIMA_X402_PUBLISHED_CREDIT_LIMIT
