@@ -22,11 +22,15 @@ import { initSupplyIntakeDb } from "./supply-intake-db.js";
 import { registerSupplyIntakeRoutes } from "./supply-intake-routes.js";
 import { initSupplyEligibilityDb } from "./supply-eligibility-db.js";
 import { registerSupplyEligibilityRoutes } from "./supply-eligibility-routes.js";
+import { initExecutionReadinessDb } from "./execution-readiness-db.js";
+import { registerExecutionReadinessRoutes } from "./execution-readiness-routes.js";
+import { startExecutionReadinessWorker } from "./execution-readiness.js";
 import { initDistributionDb } from "./distribution-db.js";
 import { registerDistributionRoutes } from "./distribution-routes.js";
 import { initCommercialOutreachDb } from "./commercial-outreach-db.js";
 import { registerCommercialOutreachRoutes } from "./commercial-outreach-routes.js";
 import { initEligibilityDb } from "./eligibility-db.js";
+import { initEligibilityReviewDb } from "./eligibility-review-db.js";
 import { initPrivacyDb } from "./privacy-db.js";
 import { getPublicCommerceQuote } from "./commerce-query.js";
 import { registerAcrSupplyScoutRoutes } from "./acr-supply-scout.js";
@@ -100,6 +104,7 @@ if (!proto.__marketInstalled) {
     registerSupplyOutreachRoutes(app);
     registerSupplyIntakeRoutes(app);
     registerSupplyEligibilityRoutes(app);
+    registerExecutionReadinessRoutes(app);
     registerDistributionRoutes(app);
     registerCommercialOutreachRoutes(app);
     registerCorporateBasketPaymentWebhookRoutes(app);
@@ -111,6 +116,7 @@ if (!proto.__marketInstalled) {
 
     void initMarketDb()
       .then(() => initEligibilityDb())
+      .then(() => initEligibilityReviewDb())
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
       .then(() => initSupplyDeskDb())
@@ -121,6 +127,7 @@ if (!proto.__marketInstalled) {
       .then(() => initSupplyOutreachDb())
       .then(() => initSupplyIntakeDb())
       .then(() => initSupplyEligibilityDb())
+      .then(() => initExecutionReadinessDb())
       .then(() => initDistributionDb())
       .then(() => initCarbonmarkRailDb())
       .then(() => initCarbonmarkSandboxCertificationDb())
@@ -144,6 +151,7 @@ if (!proto.__marketInstalled) {
         startX402CfcEnrichmentWorker();
         startSourcingAutopilot();
         startDemandAutopilotWorker();
+        startExecutionReadinessWorker();
         startCommerceWorker();
         return original.apply(this, args);
       })

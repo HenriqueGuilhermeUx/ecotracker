@@ -1,0 +1,17 @@
+name: EcoTracker Execution Readiness UI Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ui-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify board is rendered outside its own module
+        run: |
+          grep -R -l --include='*.tsx' '<ExecutionReadinessBoard' frontend/src | grep -v 'ExecutionReadinessBoard.tsx' | tee /tmp/execution-readiness-render-files
+          test -s /tmp/execution-readiness-render-files
+          grep -R -F 'import { ExecutionReadinessBoard } from "./ExecutionReadinessBoard";' frontend/src | grep -v 'ExecutionReadinessBoard.tsx'

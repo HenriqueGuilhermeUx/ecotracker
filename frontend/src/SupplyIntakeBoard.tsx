@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { SupplyEligibilityQueue } from "./SupplyEligibilityQueue";
+import { ExecutionReadinessBoard } from "./ExecutionReadinessBoard";
 import { DistributionBoard } from "./DistributionBoard";
 import "./supply-intake.css";
 
@@ -72,6 +73,7 @@ export function SupplyIntakeBoard() {
       </>}
     </section>
     <SupplyEligibilityQueue />
+    <ExecutionReadinessBoard />
     <DistributionBoard />
   </>;
 }
