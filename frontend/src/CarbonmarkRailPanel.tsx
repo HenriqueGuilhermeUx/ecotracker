@@ -10,7 +10,7 @@ const money=(value:unknown)=>new Intl.NumberFormat("pt-BR",{style:"currency",cur
 export function CarbonmarkRailPanel(){
   const [data,setData]=useState<Json>({});const [cert,setCert]=useState<Json>({});const [loading,setLoading]=useState(true);const [message,setMessage]=useState("");const [busy,setBusy]=useState("");
   const [assetId,setAssetId]=useState("");const [kg,setKg]=useState("1000");const [beneficiary,setBeneficiary]=useState("EcoTracker Sandbox Certification");
-  const load=useCallback(async()=>{try{const [rail,certification]=await Promise.all([api<Json>("/admin/market/carbonmark/control"),api<Json>("/admin/market/carbonmark/sandbox-certification")]);setData(rail);setCert(certification);if(!assetId&&rail.assets?.[0]?.id)setAssetId(String(rail.assets[0].id));setMessage("");}
+  const load=useCallback(async()=>{try{const [rail,certification]=await Promise.all([api<Json>("/admin/market/carbonmark/control"),api<Json>("/admin/market/carbonmark/sandbox-certification")]);setData(rail);setCert(certification);if(!assetId&&rail.assets?.[0]?.id)setAssetId(String(rail.assets[0].id));}
     catch(error){setMessage((error as Error).message);}finally{setLoading(false);}},[assetId]);
   useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),30000);return()=>window.clearInterval(timer);},[load]);
   const assets=Array.isArray(data.assets)?data.assets:[];const probes=Array.isArray(data.shadowQuotes)?data.shadowQuotes:[];const certifications=Array.isArray(cert.certifications)?cert.certifications:[];const execution=data.execution||{};const sandboxGate=cert.gate||{};
@@ -21,8 +21,22 @@ export function CarbonmarkRailPanel(){
   const canQuote=Boolean(execution.configured)&&quoteVolume;
   const canCertify=Boolean(sandboxGate.ready)&&certifyVolume&&beneficiary.trim().length>=2;
 
-  async function shadowQuote(){setBusy("quote");setMessage("");try{const result=await api<Json>("/admin/market/carbonmark/shadow-quote",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,createdBy:"Carbon Desk"})});setMessage(`Shadow quote ${result.quote_uuid} criada: ${money(result.cost_usdc)} USDC. Nenhum order foi criado.`);await load();}catch(error){setMessage((error as Error).message);}finally{setBusy("");}}
-  async function certifySandbox(){setBusy("cert");setMessage("");try{const result=await api<Json>("/admin/market/carbonmark/sandbox-certification/run",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,beneficiaryName:beneficiary,retirementMessage:`EcoTracker sandbox certification · ${validKg} kg CO2e`,executedBy:"Carbon Desk"})});setMessage(result.certified?`SANDBOX CERTIFICADO: retirement ${result.retirement_id||result.provider_reference} concluído e evidências gravadas.`:`Sandbox order criado e ainda processando: ${result.provider_reference}.`);await load();}catch(error){setMessage((error as Error).message);}finally{setBusy("");}}
+  async function shadowQuote(){
+    setBusy("quote");setMessage("");
+    try{
+      const result=await api<Json>("/admin/market/carbonmark/shadow-quote",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,createdBy:"Carbon Desk"})});
+      await load();
+      setMessage(`Shadow quote ${result.quote_uuid} criada: ${money(result.cost_usdc)} USDC. Nenhum order foi criado.`);
+    }catch(error){setMessage((error as Error).message);}finally{setBusy("");}
+  }
+  async function certifySandbox(){
+    setBusy("cert");setMessage("");
+    try{
+      const result=await api<Json>("/admin/market/carbonmark/sandbox-certification/run",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,beneficiaryName:beneficiary,retirementMessage:`EcoTracker sandbox certification · ${validKg} kg CO2e`,executedBy:"Carbon Desk"})});
+      await load();
+      setMessage(result.certified?`SANDBOX CERTIFICADO: retirement ${result.retirement_id||result.provider_reference} concluído e evidências gravadas.`:`Sandbox order criado e ainda processando: ${result.provider_reference}.`);
+    }catch(error){setMessage((error as Error).message);}finally{setBusy("");}
+  }
 
   return <section className="desk-card carbonmark-rail-panel">
     <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · v18</span><h2>Shadow quote → sandbox certification → produção controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · API {data.provider?.stableApiVersion||"v18"}</small></div></header>
