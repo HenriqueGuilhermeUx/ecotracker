@@ -38,7 +38,14 @@ export async function carbonmarkRailControl(){
   return {
     provider,
     execution,
-    contract:{stableApiVersion:"v18",shadowQuoteEndpoint:"POST /quotes",orderEndpoint:"POST /orders",sellerListingCreationAutomated:false},
+    contract:{
+      stableApiVersion:"v18",
+      shadowQuoteEndpoint:"POST /quotes",
+      orderEndpoint:"POST /orders",
+      sellerListingCreationAutomated:false,
+      shadowQuoteRequiresClaimReady:false,
+      orderRequiresClaimReady:true,
+    },
     summary:{assets:eligibleAssets.length,claimReady:eligibleAssets.filter((item)=>item.claimReady).length,shadowQuotes:probes.length,orderExecutionLive:execution.live},
     assets:eligibleAssets,
     shadowQuotes:probes,
@@ -58,8 +65,11 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
   if(requestedKg<minimum) throw Object.assign(new Error(`Pedido mínimo Carbonmark: ${minimum} kg`),{status:409});
   const availableTons=num(asset.available_tons);
   if(availableTons>0&&requestedKg/1000>availableTons+0.000001) throw Object.assign(new Error(`Volume monitorado insuficiente: ${availableTons} t`),{status:409});
+
+  // Shadow quote is a non-executing market probe. We still record the climate
+  // eligibility decision, but do not require claim-readiness because POST /quotes
+  // creates no order, spends no funds and retires no credits.
   const decision=evaluateAssetEligibility(asset,"voluntary_offset",requestedKg);
-  if(!decision.allowed) throw Object.assign(new Error(`Ativo não está claim-ready: ${decision.reason}`),{status:409,decision});
   const assetPriceSourceId=sourceId(asset);
   if(!assetPriceSourceId) throw Object.assign(new Error("asset_price_source_id Carbonmark ausente"),{status:409});
 
@@ -68,12 +78,13 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
   const costPerTonne=quote.costUsdc/requestedTonnes;
   const provider=carbonmarkStatus();
   const snapshot={
-    version:"ecotracker-carbonmark-shadow-quote-v1",
+    version:"ecotracker-carbonmark-shadow-quote-v2",
     monitoredAssetId:Number(asset.id),registry:asset.registry,projectName:asset.project_name,sourceReference:asset.source_reference,
     assetPriceSourceId,requestedKg,requestedTonnes,quoteUuid:quote.uuid,costUsdc:quote.costUsdc,costUsdcTonne:costPerTonne,
     environment:provider.environment,apiVersion:"v18",claimDecision:decision,executionGate:execution,
+    quotePurpose:"market_price_probe",claimReadyAtObservation:decision.allowed,
     createdBy:actor,observedAt:new Date().toISOString(),
-    invariant:"Shadow quote does not create a Carbonmark order, spend funds, or retire carbon.",
+    invariant:"Shadow quote does not create a Carbonmark order, spend funds, or retire carbon. Claim readiness remains mandatory for order/retirement.",
   };
   const hash=sha256(snapshot);
   const inserted=(await pool.query(`
@@ -89,7 +100,7 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
   const record=inserted||(await pool.query(`SELECT * FROM carbonmark_shadow_quotes WHERE quote_uuid=$1`,[quote.uuid])).rows[0];
   if(inserted){
     await pool.query(`INSERT INTO carbonmark_rail_events(shadow_quote_id,event_type,actor,payload)
-      VALUES($1,'shadow_quote_created',$2,$3::jsonb)`,[record.id,actor,JSON.stringify({probeSha256:hash,quoteUuid:quote.uuid,orderExecutionLive:execution.live})]);
+      VALUES($1,'shadow_quote_created',$2,$3::jsonb)`,[record.id,actor,JSON.stringify({probeSha256:hash,quoteUuid:quote.uuid,claimReadyAtObservation:decision.allowed,orderExecutionLive:execution.live})]);
   }
   return {
     ...record,
@@ -99,6 +110,6 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
     execution,
     orderCreated:false,
     retirementCreated:false,
-    message:"Shadow quote registrada. Nenhum POST /orders foi executado.",
+    message:"Shadow quote registrada como probe de mercado. Nenhum POST /orders foi executado.",
   };
 }
