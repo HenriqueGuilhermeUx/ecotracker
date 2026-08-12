@@ -106,6 +106,8 @@ services:
         value: "false"
       - key: CARBONMARK_SANDBOX_E2E_ACK
         value: DISABLED
+      - key: CARBONMARK_SANDBOX_TECHNICAL_MAX_KG
+        value: "1"
       - key: KLIMA_X402_BASE_URL
         value: https://x402.klimalabs.com
       - key: KLIMA_X402_PUBLISHED_CREDIT_LIMIT
