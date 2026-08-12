@@ -15,14 +15,18 @@ export function CarbonmarkRailPanel(){
   useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),30000);return()=>window.clearInterval(timer);},[load]);
   const assets=Array.isArray(data.assets)?data.assets:[];const probes=Array.isArray(data.shadowQuotes)?data.shadowQuotes:[];const certifications=Array.isArray(cert.certifications)?cert.certifications:[];const execution=data.execution||{};const sandboxGate=cert.gate||{};
   const selected=useMemo(()=>assets.find((item:Json)=>String(item.id)===assetId),[assets,assetId]);
-  const validKg=Math.round(num(kg));const validVolume=Boolean(selected?.claimReady)&&validKg>=num(selected?.min_order_kg||1)&&validKg>0;const canQuote=Boolean(execution.configured)&&validVolume;const canCertify=Boolean(sandboxGate.ready)&&validVolume&&beneficiary.trim().length>=2;
+  const validKg=Math.round(num(kg));
+  const quoteVolume=Boolean(selected)&&validKg>=num(selected?.min_order_kg||1)&&validKg>0;
+  const certifyVolume=Boolean(selected?.claimReady)&&quoteVolume;
+  const canQuote=Boolean(execution.configured)&&quoteVolume;
+  const canCertify=Boolean(sandboxGate.ready)&&certifyVolume&&beneficiary.trim().length>=2;
 
   async function shadowQuote(){setBusy("quote");setMessage("");try{const result=await api<Json>("/admin/market/carbonmark/shadow-quote",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,createdBy:"Carbon Desk"})});setMessage(`Shadow quote ${result.quote_uuid} criada: ${money(result.cost_usdc)} USDC. Nenhum order foi criado.`);await load();}catch(error){setMessage((error as Error).message);}finally{setBusy("");}}
   async function certifySandbox(){setBusy("cert");setMessage("");try{const result=await api<Json>("/admin/market/carbonmark/sandbox-certification/run",{method:"POST",body:JSON.stringify({assetId:Number(assetId),requestedKg:validKg,beneficiaryName:beneficiary,retirementMessage:`EcoTracker sandbox certification · ${validKg} kg CO2e`,executedBy:"Carbon Desk"})});setMessage(result.certified?`SANDBOX CERTIFICADO: retirement ${result.retirement_id||result.provider_reference} concluído e evidências gravadas.`:`Sandbox order criado e ainda processando: ${result.provider_reference}.`);await load();}catch(error){setMessage((error as Error).message);}finally{setBusy("");}}
 
   return <section className="desk-card carbonmark-rail-panel">
     <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · v18</span><h2>Shadow quote → sandbox certification → produção controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · API {data.provider?.stableApiVersion||"v18"}</small></div></header>
-    <div className="rail-safety"><strong>AMBIENTES SEPARADOS</strong><span>Shadow quote nunca cria order. Sandbox Certification usa gate próprio e recusa execução se o ambiente não for <code>sandbox</code> ou se o gate live estiver armado.</span></div>
+    <div className="rail-safety"><strong>AMBIENTES SEPARADOS</strong><span>Shadow quote é apenas uma consulta executável de preço e nunca cria order. Sandbox Certification exige <code>claim-ready</code>, gate próprio e recusa execução se o ambiente não for <code>sandbox</code> ou se o gate live estiver armado.</span></div>
     <div className="rail-status-grid">
       <span><small>API key</small><b>{execution.configured?"configurada":"ausente"}</b></span><span><small>Prod flag</small><b>{execution.enabled?"ON":"OFF"}</b></span><span><small>Prod ACK</small><b>{execution.acknowledged?"OK":"DISABLED"}</b></span><span><small>Produção</small><b>{execution.live?"LIVE":"BLOCKED"}</b></span>
       <span><small>Sandbox flag</small><b>{sandboxGate.enabled?"ON":"OFF"}</b></span><span><small>Sandbox ACK</small><b>{sandboxGate.acknowledged?"OK":"DISABLED"}</b></span><span><small>Sandbox safe</small><b>{sandboxGate.ready?"ARMADO":"BLOCKED"}</b></span><span><small>Certificações</small><b>{cert.summary?.completed||0}</b></span>
@@ -32,12 +36,12 @@ export function CarbonmarkRailPanel(){
       <div className="shadow-quote-form">
         <label>Listing Carbonmark<select value={assetId} onChange={e=>setAssetId(e.target.value)}>{assets.map((item:Json)=><option key={item.id} value={item.id}>{item.project_name} · {item.registry} · {money(item.source_price_usd_ton)}/t · min {item.min_order_kg} kg</option>)}</select></label>
         <label>Quantidade kg<input type="number" min={selected?.min_order_kg||1} step="1" value={kg} onChange={e=>setKg(e.target.value)}/></label>
-        <div className="shadow-preview"><small>Selecionado</small><b>{selected?.project_name||"—"}</b><span>{tons(validKg/1000)} t · source {selected?.assetPriceSourceId||"—"}</span></div>
+        <div className="shadow-preview"><small>Selecionado</small><b>{selected?.project_name||"—"}</b><span>{tons(validKg/1000)} t · source {selected?.assetPriceSourceId||"—"}</span>{selected&&!selected.claimReady&&<span>Cotação permitida · order/retirement continuam bloqueados por elegibilidade.</span>}</div>
         <button disabled={!canQuote||busy!==""} onClick={()=>void shadowQuote()}>{busy==="quote"?"Cotando...":"Executar shadow quote"}</button>
       </div>
       <div className="shadow-quote-form">
         <label>Beneficiário sandbox<input value={beneficiary} onChange={e=>setBeneficiary(e.target.value)}/></label>
-        <div className="shadow-preview"><small>Sandbox E2E</small><b>{sandboxGate.ready?"Pronto para certificar":"Gate desarmado"}</b><span>quote → order → retirement → certificate → provenance</span></div>
+        <div className="shadow-preview"><small>Sandbox E2E</small><b>{sandboxGate.ready?(selected?.claimReady?"Pronto para certificar":"Listing ainda não claim-ready"):"Gate desarmado"}</b><span>quote → order → retirement → certificate → provenance</span></div>
         <button disabled={!canCertify||busy!==""} onClick={()=>void certifySandbox()}>{busy==="cert"?"Certificando...":"Certificar E2E sandbox"}</button>
       </div>
       {!execution.configured&&<div className="rail-blocker">Configure <b>CARBONMARK_API_KEY</b>. API key sozinha não habilita produção.</div>}
