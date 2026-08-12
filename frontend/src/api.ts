@@ -33,9 +33,11 @@ function ptBrError(message: string | null | undefined, status?: number) {
     "gateway timeout": "Um provedor externo demorou para responder. Tente novamente em instantes.",
     "failed to fetch": "Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.",
     "network error": "Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.",
+    "maximum quotable quantity exceeded": "A quantidade solicitada excede o máximo cotável neste listing Carbonmark. Tente uma quantidade menor ou selecione outro listing.",
   };
   if (exact[normalized]) return exact[normalized];
 
+  if (normalized.includes("maximum quotable quantity exceeded")) return "A quantidade solicitada excede o máximo cotável neste listing Carbonmark. Tente uma quantidade menor ou selecione outro listing.";
   if (normalized.includes("please try again")) return "Não foi possível concluir a operação. Tente novamente em instantes.";
   if (normalized.includes("timeout") || normalized.includes("timed out")) return "A operação demorou mais que o esperado. Tente novamente em instantes.";
   if (normalized.includes("unauthorized")) return "Sua sessão não está autorizada para esta operação.";
