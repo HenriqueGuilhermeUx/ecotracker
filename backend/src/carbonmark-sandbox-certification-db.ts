@@ -12,6 +12,7 @@ export async function initCarbonmarkSandboxCertificationDb():Promise<void>{
       cost_usdc NUMERIC(18,6) NOT NULL CHECK(cost_usdc>0),
       beneficiary_name VARCHAR(255) NOT NULL,
       retirement_message VARCHAR(500) NOT NULL,
+      certification_mode VARCHAR(30) NOT NULL DEFAULT 'claim_ready',
       status VARCHAR(40) NOT NULL CHECK(status IN ('processing','completed','failed')),
       provider_reference TEXT,
       retirement_id TEXT,
@@ -28,6 +29,17 @@ export async function initCarbonmarkSandboxCertificationDb():Promise<void>{
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       completed_at TIMESTAMPTZ
     );
+
+    ALTER TABLE carbonmark_sandbox_certifications
+      ADD COLUMN IF NOT EXISTS certification_mode VARCHAR(30) NOT NULL DEFAULT 'claim_ready';
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='carbonmark_sandbox_certification_mode_check') THEN
+        ALTER TABLE carbonmark_sandbox_certifications
+          ADD CONSTRAINT carbonmark_sandbox_certification_mode_check
+          CHECK(certification_mode IN ('claim_ready','technical_probe'));
+      END IF;
+    END $$;
 
     CREATE TABLE IF NOT EXISTS carbonmark_sandbox_certification_events(
       id BIGSERIAL PRIMARY KEY,

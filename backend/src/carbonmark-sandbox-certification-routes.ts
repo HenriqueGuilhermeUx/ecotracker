@@ -3,7 +3,14 @@ import { z } from "zod";
 import { requireAdmin } from "./auth.js";
 import { carbonmarkSandboxCertificationControl, runCarbonmarkSandboxCertification } from "./carbonmark-sandbox-certification.js";
 
-const runSchema=z.object({assetId:z.coerce.number().int().positive(),requestedKg:z.coerce.number().int().positive().max(100000),beneficiaryName:z.string().min(2).max(255),retirementMessage:z.string().max(500).optional(),executedBy:z.string().max(255).nullable().optional()});
+const runSchema=z.object({
+  assetId:z.coerce.number().int().positive(),
+  requestedKg:z.coerce.number().int().positive().max(100000),
+  beneficiaryName:z.string().min(2).max(255),
+  retirementMessage:z.string().max(500).optional(),
+  executedBy:z.string().max(255).nullable().optional(),
+  certificationMode:z.enum(["claim_ready","technical_probe"]).optional(),
+});
 function fail(res:Response,error:unknown){const status=typeof error==="object"&&error&&"status" in error?Number((error as {status:unknown}).status):500;const body:Record<string,unknown>={error:error instanceof Error?error.message:"Erro interno"};if(typeof error==="object"&&error&&"gate" in error)body.gate=(error as {gate:unknown}).gate;if(typeof error==="object"&&error&&"decision" in error)body.decision=(error as {decision:unknown}).decision;return res.status(Number.isFinite(status)&&status>=400&&status<=599?status:500).json(body);}
 
 export function registerCarbonmarkSandboxCertificationRoutes(app:Application){
