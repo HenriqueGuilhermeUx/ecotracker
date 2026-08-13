@@ -1,0 +1,43 @@
+name: EcoTracker Client Agreement Gate Smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ecotracker
+          POSTGRES_PASSWORD: ecotracker
+          POSTGRES_DB: ecotracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ecotracker -d ecotracker"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://ecotracker:ecotracker@127.0.0.1:5432/ecotracker
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+      - name: Run Client Agreement Gate smoke
+        working-directory: backend
+        run: node scripts/client-agreement-gate-smoke.mjs
