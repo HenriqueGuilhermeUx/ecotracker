@@ -37,6 +37,7 @@ import { registerAcrSupplyScoutRoutes } from "./acr-supply-scout.js";
 import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
 import { initAssistedSourcingDb } from "./assisted-sourcing-db.js";
 import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-routes.js";
+import { registerClientAgreementRoutes } from "./client-agreement-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
 import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
@@ -93,6 +94,7 @@ if (!proto.__marketInstalled) {
     registerEligibilityRoutes(app);
     registerAssistedQuoteRoutes(app);
     registerAssistedSourcingOpsRoutes(app);
+    registerClientAgreementRoutes(app);
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
