@@ -1,0 +1,1 @@
+Client Agreement Gate is positioned after source confirmation and final commercial approval, before payment.
