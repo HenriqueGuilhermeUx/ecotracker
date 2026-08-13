@@ -33,11 +33,11 @@ function DealDeskPanel(){
   const [message,setMessage]=useState("");
   const [result,setResult]=useState<Json|null>(null);
 
-  async function runSourcing(opportunityId:number){
+  async function runSourcing(opportunityId:number,existing?:Json|null){
     const sourcing=await api<Json>(`/admin/demand/opportunities/${opportunityId}/rfq`,{method:"POST",body:"{}"});
     const matching=sourcing.matching||{};
-    let proposal:Json|null=null; let basket:Json|null=null;
-    if(matching.fullyCovered){
+    let proposal:Json|null=existing?.proposal||null; let basket:Json|null=existing?.basket||null;
+    if(matching.fullyCovered&&!proposal){
       proposal=await api<Json>(`/admin/demand/opportunities/${opportunityId}/proposal`,{method:"POST",body:JSON.stringify({validityMinutes:1440,notes:"Large Corporate Deal Desk · revisão comercial obrigatória antes do envio."})});
       if(proposal.basketQuoteRequired||proposal.checkout_mode==="basket_quote_required"){
         basket=await api<Json>(`/admin/demand/proposals/${proposal.id}/basket`,{method:"POST",body:JSON.stringify({notes:"Large Corporate Deal Desk · basket interno; checkout permanece desabilitado."})});
@@ -47,7 +47,7 @@ function DealDeskPanel(){
   }
 
   async function submit(event:FormEvent){
-    event.preventDefault(); setBusy(true); setMessage("");
+    event.preventDefault(); setBusy(true); setMessage(""); setResult(null);
     try{
       const cleanTax=taxId.replace(/\D/g,"");
       const account=await api<Json>("/admin/demand/accounts",{method:"POST",body:JSON.stringify({
@@ -70,7 +70,7 @@ function DealDeskPanel(){
   async function refresh(){
     if(!result?.opportunity?.id)return;
     setBusy(true);setMessage("");
-    try{const flow=await runSourcing(Number(result.opportunity.id));setResult({...result,...flow});setMessage(flow.sourcing?.matching?.fullyCovered?"Cobertura integral alcançada; proposta/basket atualizados.":"Matching e RFQ atualizados.")}catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
+    try{const flow=await runSourcing(Number(result.opportunity.id),result);setResult({...result,...flow});setMessage(flow.sourcing?.matching?.fullyCovered?"Cobertura integral alcançada; proposta/basket preservados.":"Matching e RFQ atualizados.")}catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
   }
 
   const matching=result?.sourcing?.matching||{};
