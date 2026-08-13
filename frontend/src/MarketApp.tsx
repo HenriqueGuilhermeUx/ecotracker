@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import LegacyApp from "./App";
 import { CarbonDesk } from "./CarbonDeskV2";
+import { ClientAgreementPage } from "./ClientAgreementPage";
 import { LargeOrderDealDesk } from "./LargeOrderDealDesk";
 import { MarketCatalog } from "./MarketCatalog";
 import { MarketAdmin } from "./MarketAdmin";
@@ -17,6 +18,7 @@ export default function MarketApp() {
     return () => removeEventListener("hashchange", handleHashChange);
   }, []);
 
+  if (page.startsWith("agreement/")) return <ClientAgreementPage publicCode={page.slice("agreement/".length)} />;
   if (page === "marketplace") return <MarketCatalog />;
   if (page === "market-admin") return <MarketAdmin />;
   if (page === "carbon-desk") return <CarbonDesk />;
