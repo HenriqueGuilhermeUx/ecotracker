@@ -30,6 +30,18 @@ services:
         value: https://ecotracker10.netlify.app
       - key: PUBLIC_API_URL
         value: https://ecotracker-api-cik7.onrender.com
+      - key: ECOT_LEGAL_NAME
+        sync: false
+      - key: ECOT_LEGAL_TAX_ID
+        sync: false
+      - key: ECOT_LEGAL_ADDRESS
+        sync: false
+      - key: ECOT_LEGAL_EMAIL
+        sync: false
+      - key: ECOT_CONTRACT_FORUM_CITY
+        sync: false
+      - key: ECOT_CONTRACT_FORUM_STATE
+        sync: false
       - key: ECOT_MIN_SERVICE_FEE_BRL
         value: "29.90"
       - key: ECOT_QUOTE_TTL_MINUTES
