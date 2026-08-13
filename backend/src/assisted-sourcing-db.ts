@@ -21,6 +21,20 @@ export async function initAssistedSourcingDb(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS assisted_quote_reviews (
+      id BIGSERIAL PRIMARY KEY,
+      quote_id BIGINT NOT NULL UNIQUE REFERENCES quote_requests(id) ON DELETE CASCADE,
+      status VARCHAR(20) NOT NULL DEFAULT 'approved' CHECK (status IN ('approved','rejected')),
+      reviewed_by VARCHAR(255) NOT NULL,
+      review_note TEXT,
+      snapshot JSONB NOT NULL,
+      snapshot_sha256 VARCHAR(64) NOT NULL,
+      approved_at TIMESTAMPTZ,
+      rejected_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE OR REPLACE FUNCTION ecotracker_guard_assisted_source_jobs()
     RETURNS TRIGGER AS $$
     DECLARE
@@ -63,5 +77,7 @@ export async function initAssistedSourcingDb(): Promise<void> {
       ON quote_requests(automation_enabled,payment_status,status,created_at DESC);
     CREATE INDEX IF NOT EXISTS retirement_proofs_registry_idx
       ON retirement_proofs(registry,created_at DESC);
+    CREATE INDEX IF NOT EXISTS assisted_quote_reviews_status_idx
+      ON assisted_quote_reviews(status,created_at DESC);
   `);
 }
