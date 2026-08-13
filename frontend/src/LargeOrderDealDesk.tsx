@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { api } from "./api";
 import { MarketShell } from "./MarketShell";
 import "./deal-desk.css";
@@ -32,6 +32,46 @@ function DealDeskPanel(){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [result,setResult]=useState<Json|null>(null);
+  const [assistedQuotes,setAssistedQuotes]=useState<Array<Json>>([]);
+  const [assistedQuote,setAssistedQuote]=useState<Json|null>(null);
+  const [sourceReview,setSourceReview]=useState<Json|null>(null);
+  const [sourceCostBrl,setSourceCostBrl]=useState("");
+  const [sourceReference,setSourceReference]=useState("");
+  const [sourceEvidenceUrl,setSourceEvidenceUrl]=useState("");
+  const [sourceAvailableKg,setSourceAvailableKg]=useState("");
+  const [quoteTtlMinutes,setQuoteTtlMinutes]=useState("30");
+  const [sourceNotes,setSourceNotes]=useState("");
+
+  async function loadAssistedQuotes(preferId?:number){
+    const data=await api<Json>("/admin/market/assisted-sourcing?limit=40");
+    const items:Array<Json>=Array.isArray(data.items)?data.items:[];
+    setAssistedQuotes(items);
+    const wanted=preferId?items.find(item=>Number(item.id)===preferId):assistedQuote?items.find(item=>Number(item.id)===Number(assistedQuote.id)):null;
+    if(wanted) setAssistedQuote(wanted);
+    return {items,wanted};
+  }
+
+  async function loadSourceReview(quoteId:number){
+    try{
+      const review=await api<Json>(`/admin/market/assisted-sourcing/${quoteId}/review`);
+      setSourceReview(review);
+      return review;
+    }catch{
+      setSourceReview(null);
+      return null;
+    }
+  }
+
+  useEffect(()=>{void loadAssistedQuotes().catch(()=>undefined)},[]);
+
+  async function selectAssisted(quoteId:number){
+    const quote=assistedQuotes.find(item=>Number(item.id)===quoteId)||null;
+    setAssistedQuote(quote);
+    setSourceReview(null);
+    setSourceCostBrl("");setSourceReference("");setSourceEvidenceUrl("");setSourceNotes("");
+    setSourceAvailableKg(quote?.requested_kg?String(quote.requested_kg):"");
+    if(quote) await loadSourceReview(Number(quote.id));
+  }
 
   async function runSourcing(opportunityId:number,existing?:Json|null){
     const sourcing=await api<Json>(`/admin/demand/opportunities/${opportunityId}/rfq`,{method:"POST",body:"{}"});
@@ -94,7 +134,38 @@ function DealDeskPanel(){
     try{
       const conversion=await api<Json>(`/admin/demand/proposals/${result.proposal.id}/convert-single`,{method:"POST",body:"{}"});
       setResult({...result,conversion});
-      setMessage(conversion.checkoutReady?"Cotação single-asset criada e revalidada. Checkout NÃO foi acionado.":conversion.message||"Cotação criada em modo assistido. Checkout permanece bloqueado.");
+      if(conversion.quote?.id&&!conversion.checkoutReady){
+        const loaded=await loadAssistedQuotes(Number(conversion.quote.id));
+        const selected=loaded.wanted||loaded.items.find(item=>Number(item.id)===Number(conversion.quote.id));
+        if(selected){setAssistedQuote(selected);setSourceAvailableKg(String(selected.requested_kg||""));await loadSourceReview(Number(selected.id))}
+      }
+      setMessage(conversion.checkoutReady?"Cotação single-asset criada e revalidada. Checkout NÃO foi acionado.":conversion.message||"Cotação criada em modo assistido. Confirme agora fonte, estoque e custo.");
+    }catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
+  }
+
+  async function confirmSource(){
+    if(!assistedQuote?.id)return;
+    if(!sourceCostBrl||!sourceReference||!sourceAvailableKg){setMessage("Informe custo total da fonte, referência da confirmação e estoque confirmado.");return}
+    setBusy(true);setMessage("");
+    try{
+      const confirmed=await api<Json>(`/admin/market/assisted-sourcing/${assistedQuote.id}/confirm-source`,{method:"POST",body:JSON.stringify({
+        sourceCostBrl:Number(sourceCostBrl),sourceReference,sourceEvidenceUrl:sourceEvidenceUrl||null,
+        sourceAvailableKg:Number(sourceAvailableKg),quoteTtlMinutes:Number(quoteTtlMinutes)||30,notes:sourceNotes||null,
+      })});
+      await loadAssistedQuotes(Number(assistedQuote.id));
+      setSourceReview(null);
+      setMessage(confirmed.message||"Fonte confirmada e cotação reprificada. Nova aprovação comercial obrigatória.");
+    }catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
+  }
+
+  async function approveRepricedQuote(){
+    if(!assistedQuote?.id)return;
+    setBusy(true);setMessage("");
+    try{
+      const approved=await api<Json>(`/admin/market/assisted-sourcing/${assistedQuote.id}/review/approve`,{method:"POST",body:JSON.stringify({reviewedBy:"Deal Desk",note:"Preço pós-sourcing aprovado manualmente no Large Corporate Order Deal Desk."})});
+      setSourceReview(approved);
+      await loadAssistedQuotes(Number(assistedQuote.id));
+      setMessage(approved.message||"Cotação reprificada aprovada. Checkout não foi criado.");
     }catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
   }
 
@@ -104,9 +175,13 @@ function DealDeskPanel(){
   const items:Array<Json>=Array.isArray(result?.proposal?.snapshot?.items)?result.proposal.snapshot.items:[];
   const singleAsset=result?.proposal?.checkout_mode==="single_asset_quote"||result?.proposal?.checkoutMode==="single_asset_quote";
   const buyerEmail=result?.account?.contact_email||contactEmail||"";
+  const assistedPricing:Json=assistedQuote?.pricing_snapshot&&typeof assistedQuote.pricing_snapshot==="object"?assistedQuote.pricing_snapshot:{};
+  const assistedReviewCurrent=Boolean(assistedQuote?.commercialReviewCurrent||sourceReview?.current);
+  const sourceConfirmed=assistedQuote?.sourcing_status==="manual_source_confirmed";
+  const requestedKg=n(assistedQuote?.requested_kg);
   return <MarketShell><main className="deal-desk">
-    <header className="deal-head"><div><span className="tag">LARGE CORPORATE ORDER</span><h1>Deal Desk</h1><p>Pedido inbound → matching → proposta → revisão → cotação.</p></div><div><a className="deal-secondary" href="#carbon-desk">Carbon Desk</a><a className="deal-secondary" href="#market-admin">Operação</a></div></header>
-    <section className="deal-safety"><b>SAFE MODE</b><span>Revisão e conversão de proposta são internas. Este fluxo não envia e-mail, não abre checkout, não cobra dinheiro e não executa purchase/retirement automaticamente.</span></section>
+    <header className="deal-head"><div><span className="tag">LARGE CORPORATE ORDER</span><h1>Deal Desk</h1><p>Pedido inbound → matching → proposta → revisão → sourcing → cotação executável.</p></div><div><a className="deal-secondary" href="#carbon-desk">Carbon Desk</a><a className="deal-secondary" href="#market-admin">Operação</a></div></header>
+    <section className="deal-safety"><b>SAFE MODE</b><span>Confirmação de sourcing e aprovações são internas. Este fluxo não envia e-mail, não cria checkout, não cobra dinheiro e não executa purchase/retirement automaticamente.</span></section>
     {message&&<div className="deal-message">{message}</div>}
     <div className="deal-layout"><form className="deal-form" onSubmit={submit}>
       <h2>Abrir ordem corporativa</h2><label>Empresa<input required value={companyName} onChange={e=>setCompanyName(e.target.value)} placeholder="Empresa compradora"/></label>
@@ -118,19 +193,43 @@ function DealDeskPanel(){
       <label>Tipo de projeto<input value={projectType} onChange={e=>setProjectType(e.target.value)} placeholder="REDD+, biochar, reflorestamento..."/></label><label>Notas<textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}/></label>
       <button className="deal-primary" disabled={busy}>{busy?"Rodando matching...":"Abrir ordem e buscar supply"}</button>
     </form>
-    <section className="deal-result"><h2>Status da ordem</h2>{!result?<div className="deal-empty">Abra uma ordem para o motor montar a cobertura.</div>:<>
+    <section className="deal-result"><h2>Status da ordem</h2>{!result?<div className="deal-empty">Abra uma nova ordem ou retome uma quote_request assistida abaixo.</div>:<>
       <div className="deal-company"><div><b>{result.account?.company_name}</b><small>Opportunity #{result.opportunity?.id}</small></div><strong>{tons(matching.targetTonnes)} t</strong></div>
       <div className="deal-progress"><i style={{width:`${Math.min(100,coverage)}%`}}/></div>
       <div className="deal-kpis"><span><small>Coberto</small><b>{tons(matching.coveredTonnes)} t</b></span><span><small>Gap</small><b>{tons(gap)} t</b></span><span><small>Cobertura</small><b>{coverage.toFixed(1)}%</b></span></div>
       <div className="deal-stage"><span className={matching.fullyCovered?"ok":"warn"}>{matching.fullyCovered?"COBERTURA INTEGRAL":"SOURCING REQUIRED"}</span><p>{matching.fullyCovered?"Créditos claim-ready cobrem o pedido. Próximo passo: revisão comercial.":`RFQ #${result.sourcing?.rfq?.id||"—"} aberto para ${tons(gap)} t.`}</p></div>
       {result.proposal&&<div className="deal-artifact"><small>PROPOSTA</small><b>{result.proposal.public_code?.slice(0,8)} · {result.proposal.checkout_mode}</b><span>{result.proposal.final_total_brl?`${money(result.proposal.final_total_brl)} · ${money(result.proposal.price_per_tonne_brl)}/t`:"Preço final depende da confirmação das legs"}</span></div>}
       {items.map((item,index)=><div className="deal-asset" key={`${item.assetId}-${index}`}><div><small>ATIVO CLAIM-READY</small><b>{item.projectName||`Ativo #${item.assetId}`}</b><span>{item.registry||"registry n/d"} · vintage {item.vintage||"n/d"}</span></div><div><strong>{tons(item.amountTonnes)} t</strong><small>{item.executionMode||"assisted"}</small></div></div>)}
-      {result.proposal&&matching.fullyCovered&&!result.review&&<button className="deal-primary full" disabled={busy} onClick={()=>void approve()}>{busy?"Aprovando...":"Aprovar snapshot comercial"}</button>}
+      {result.proposal&&matching.fullyCovered&&!result.review&&<button type="button" className="deal-primary full" disabled={busy} onClick={()=>void approve()}>{busy?"Aprovando...":"Aprovar snapshot comercial"}</button>}
       {result.review&&<div className="deal-review"><b>REVISÃO APROVADA</b><span>SHA {String(result.review.snapshot_sha256||"").slice(0,16)}…</span><small>Nenhum e-mail enviado.</small></div>}
-      {result.review&&singleAsset&&!result.conversion&&<><div className={`deal-email ${buyerEmail?"ok":"warn"}`}><b>{buyerEmail?"E-mail pronto para quote_request":"E-mail obrigatório para conversão"}</b><span>{buyerEmail||"Cadastre um e-mail válido no pedido de teste."}</span></div><button className="deal-secondary full" disabled={busy||!buyerEmail} onClick={()=>void convert()}>{busy?"Convertendo...":"Converter para cotação single-asset"}</button></>}
-      {result.conversion&&<div className="deal-quote"><small>QUOTE_REQUEST</small><b>{result.conversion.quote?.public_code?.slice(0,8)||`#${result.conversion.quote?.id||"—"}`} · {result.conversion.quote?.status||"criada"}</b><span>{result.conversion.quote?.requested_kg?`${tons(n(result.conversion.quote.requested_kg)/1000)} t`:""}{result.conversion.quote?.final_total?` · ${money(result.conversion.quote.final_total)}`:""}</span><em>{result.conversion.checkoutReady?"Cotação pronta; checkout não acionado.":"Modo assistido; reconfirmar fonte/estoque/custo antes de checkout."}</em></div>}
+      {result.review&&singleAsset&&!result.conversion&&<><div className={`deal-email ${buyerEmail?"ok":"warn"}`}><b>{buyerEmail?"E-mail pronto para quote_request":"E-mail obrigatório para conversão"}</b><span>{buyerEmail||"Cadastre um e-mail válido no pedido de teste."}</span></div><button type="button" className="deal-secondary full" disabled={busy||!buyerEmail} onClick={()=>void convert()}>{busy?"Convertendo...":"Converter para cotação single-asset"}</button></>}
+      {result.conversion&&<div className="deal-quote"><small>QUOTE_REQUEST</small><b>{result.conversion.quote?.public_code?.slice(0,8)||`#${result.conversion.quote?.id||"—"}`} · {result.conversion.quote?.status||"criada"}</b><span>{result.conversion.quote?.requested_kg?`${tons(n(result.conversion.quote.requested_kg)/1000)} t`:""}{result.conversion.quote?.final_total?` · ${money(result.conversion.quote.final_total)}`:""}</span><em>{result.conversion.checkoutReady?"Cotação pronta; checkout não acionado.":"Modo assistido; confirmar fonte/estoque/custo antes de checkout."}</em></div>}
       {result.basket&&<div className="deal-artifact"><small>BASKET</small><b>{result.basket.public_code?.slice(0,8)} · {result.basket.status}</b><span>Checkout: OFF · confirmar legs antes da reserva.</span></div>}
-      <button className="deal-secondary full" disabled={busy} onClick={()=>void refresh()}>{busy?"Atualizando...":"Recalcular sourcing"}</button>
-    </>}</section></div>
+      <button type="button" className="deal-secondary full" disabled={busy} onClick={()=>void refresh()}>{busy?"Atualizando...":"Recalcular sourcing"}</button>
+    </>}
+
+      <div className="deal-sourcing-divider"><span>SOURCING CONFIRMATION GATE</span></div>
+      <label className="deal-resume">Retomar quote_request assistida<select value={assistedQuote?.id||""} onChange={e=>void selectAssisted(Number(e.target.value))}><option value="">Selecione...</option>{assistedQuotes.map(q=><option value={q.id} key={q.id}>{String(q.public_code||"").slice(0,8)} · {q.project_name||q.registry} · {tons(n(q.requested_kg)/1000)} t · {q.nextAction}</option>)}</select></label>
+      {assistedQuote&&<div className="deal-source-panel">
+        <div className="deal-source-head"><div><small>QUOTE ASSISTIDA</small><b>{String(assistedQuote.public_code||"").slice(0,8)} · {assistedQuote.status}</b><span>{assistedQuote.project_name} · {assistedQuote.registry} · vintage {assistedQuote.vintage||"n/d"}</span></div><strong>{tons(requestedKg/1000)} t</strong></div>
+        <div className="deal-monitor"><span><small>DISPONÍVEL MONITORADO</small><b>{assistedQuote.available_tons==null?"n/d":`${tons(assistedQuote.available_tons)} t`}</b></span><span><small>PREÇO MONITORADO</small><b>{assistedPricing.monitoredSourcePriceUsdTon?`US$ ${n(assistedPricing.monitoredSourcePriceUsdTon).toFixed(2)}/t`:"n/d"}</b></span></div>
+        {assistedQuote.sourcePreview&&<a className="deal-source-link" href={assistedQuote.sourcePreview} target="_blank" rel="noreferrer">Abrir fonte/evidência monitorada ↗</a>}
+        {!sourceConfirmed?<div className="deal-source-form">
+          <p><b>Confirmação manual obrigatória.</b> O valor abaixo é o custo TOTAL para adquirir as {tons(requestedKg/1000)} t — não o preço por tonelada.</p>
+          <label>Custo total confirmado da fonte (R$)<input type="number" min="0.01" step="0.01" value={sourceCostBrl} onChange={e=>setSourceCostBrl(e.target.value)} placeholder="Ex.: 600000,00"/></label>
+          <label>Estoque confirmado (kg)<input type="number" min={requestedKg||1} step="1" value={sourceAvailableKg} onChange={e=>setSourceAvailableKg(e.target.value)}/><small>Para 10.000 t, precisa ser no mínimo 10.000.000 kg.</small></label>
+          <label>Referência da confirmação<input value={sourceReference} onChange={e=>setSourceReference(e.target.value)} placeholder="ID da cotação, orderbook, e-mail/quote do fornecedor..."/></label>
+          <label>URL de evidência<input type="url" value={sourceEvidenceUrl} onChange={e=>setSourceEvidenceUrl(e.target.value)} placeholder="https://... (opcional)"/></label>
+          <div className="deal-two"><label>Validade (min)<input type="number" min="5" max="1440" value={quoteTtlMinutes} onChange={e=>setQuoteTtlMinutes(e.target.value)}/></label><label>Notas<input value={sourceNotes} onChange={e=>setSourceNotes(e.target.value)} placeholder="opcional"/></label></div>
+          <button type="button" className="deal-primary full" disabled={busy||!sourceCostBrl||!sourceReference||n(sourceAvailableKg)<requestedKg} onClick={()=>void confirmSource()}>{busy?"Confirmando...":"Confirmar fonte, estoque e custo"}</button>
+        </div>:<div className="deal-source-confirmed">
+          <b>FONTE CONFIRMADA · REPRIFICADA</b>
+          <div className="deal-kpis"><span><small>Custo fonte</small><b>{money(assistedQuote.source_cost_brl)}</b></span><span><small>Preço venda</small><b>{money(assistedQuote.final_total)}</b></span><span><small>Preço / t</small><b>{money(n(assistedQuote.final_total)/(requestedKg/1000))}</b></span></div>
+          <small>Referência: {assistedQuote.sourcing_reference||"—"} · validade até {assistedQuote.quote_expires_at?new Date(assistedQuote.quote_expires_at).toLocaleString("pt-BR"):"n/d"}</small>
+        </div>}
+        {sourceConfirmed&&!assistedReviewCurrent&&<div className="deal-reapproval"><b>NOVA APROVAÇÃO OBRIGATÓRIA</b><span>A confirmação da fonte alterou o preço executável. A aprovação da proposta anterior não libera checkout.</span><button type="button" className="deal-primary full" disabled={busy} onClick={()=>void approveRepricedQuote()}>{busy?"Aprovando...":"Aprovar cotação reprificada"}</button></div>}
+        {sourceConfirmed&&assistedReviewCurrent&&<div className="deal-execution-ready"><b>COTAÇÃO COMERCIALMENTE APROVADA</b><span>SHA {String(sourceReview?.review?.snapshot_sha256||assistedQuote.commercial_review_sha256||"").slice(0,16)}…</span><small>Fonte + estoque + custo + preço estão congelados. Checkout/pagamento continuam sem acionamento automático.</small></div>}
+      </div>}
+    </section></div>
   </main></MarketShell>;
 }
