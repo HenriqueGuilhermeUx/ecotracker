@@ -26,6 +26,21 @@ let workerStarted = false;
 
 const baseUrl = () => (process.env.GOLD_STANDARD_MARKETPLACE_BASE || "https://marketplace.goldstandard.org").replace(/\/$/, "");
 
+function objectAt(value: unknown): Asset {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Asset;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Asset : {};
+    } catch { return {}; }
+  }
+  return {};
+}
+
+function boolAt(value: unknown) {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&nbsp;/gi, " ")
@@ -172,23 +187,31 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
     if (!details.found) continue;
     enriched += 1;
 
+    const marketplace = objectAt(asset.monitor_details);
+    // products.json/variant.available is the commercial truth. The catalog may still
+    // expose an inventory number for a backordered/unavailable product; that number
+    // remains monitoring evidence and must never be promoted to sellable capacity.
+    const storefrontAvailable = boolAt(marketplace.storefrontAvailable);
     const stock = details.stockTons;
     const vintages = details.vintages;
     const oldest = vintages[0] || null;
     const newest = vintages[vintages.length - 1] || null;
     const allVintagesWithinPolicy = oldest != null && newest != null && oldest >= minVintage && newest <= currentYear;
     const hasStock = stock != null && stock > 0;
+    const commercialStock = storefrontAvailable && hasStock ? stock : 0;
     const hasEvidence = Boolean(asset.registry_evidence_url || asset.source_url);
-    const verified = hasStock && allVintagesWithinPolicy && hasEvidence;
+    const verified = storefrontAvailable && hasStock && allVintagesWithinPolicy && hasEvidence;
     if (allVintagesWithinPolicy) recentVintageCandidates += 1;
     if (verified) verifiedAssisted += 1;
 
     // O marketplace oficial garante retirement no Impact Registry, certificate e
     // Retirement Attribution ao beneficiário. A execução segue assistida: isso
-    // habilita o claim de compensação, mas NÃO checkout automático.
+    // habilita o claim de compensação somente quando o storefront também informa
+    // disponibilidade comercial atual.
     const nextFlags = [
       "gold-standard-marketplace-execution-assisted",
       "gold-standard-commerce-api-not-integrated",
+      ...(!storefrontAvailable ? ["gold-standard-marketplace-currently-unavailable"] : []),
       ...(vintages.length > 1 ? ["gold-standard-vintage-allocation-confirm-at-retirement"] : []),
       ...(!hasStock ? ["gold-standard-stock-quantity-not-confirmed"] : []),
       ...(vintages.length === 0 ? ["gold-standard-vintage-not-resolved"] : []),
@@ -198,7 +221,9 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
     const riskFlags = mergeFlags(asset.eligibility_risk_flags, nextFlags);
     const enrichment = {
       source: `${baseUrl()}/`,
-      stockTonnes: stock,
+      storefrontAvailable,
+      catalogStockTonnes: stock,
+      commercialStockTonnes: commercialStock,
       vintages,
       oldestVintage: oldest,
       newestVintage: newest,
@@ -243,14 +268,14 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
       vintageLabel,
       details.location,
       details.projectType,
-      stock,
-      hasStock ? "indicative" : "monitoring",
+      commercialStock,
+      storefrontAvailable && hasStock ? "indicative" : "monitoring",
       verified ? "voluntary_offset" : "climate_contribution",
       verified ? "eligible" : "restricted",
       verified
-        ? "Oferta pública Gold Standard com estoque e todas as vintages dentro da política EcoTracker. O próprio Gold Standard aposenta os créditos no Impact Registry, permite Retirement Attribution e emite Retirement Certificate. Execução EcoTracker permanece assistida; a vintage efetivamente alocada deve ser confirmada no certificado antes do fulfillment final."
-        : "Oferta Gold Standard monitorada. Permanece fora da prateleira de compensação até estoque, vintage e evidência satisfazerem integralmente a política EcoTracker.",
-      hasStock ? "tradable" : "unknown",
+        ? "Oferta pública Gold Standard comercialmente disponível no storefront, com estoque e todas as vintages dentro da política EcoTracker. O próprio Gold Standard aposenta os créditos no Impact Registry, permite Retirement Attribution e emite Retirement Certificate. Execução EcoTracker permanece assistida; a vintage efetivamente alocada deve ser confirmada no certificado antes do fulfillment final."
+        : "Oferta Gold Standard monitorada. Permanece fora da prateleira de compensação até disponibilidade comercial atual, estoque, vintage e evidência satisfazerem integralmente a política EcoTracker.",
+      storefrontAvailable && hasStock ? "tradable" : "unknown",
       vintageStart,
       vintageEnd,
       validUntil,

@@ -100,7 +100,9 @@ async function readyAssetCandidates(opportunity: Json) {
       AND claim_category='voluntary_offset'
       AND eligibility_status='eligible'
       AND source_unit_status='tradable'
+      AND availability_status IN ('confirmed','indicative')
       AND retirement_supported=TRUE
+      AND COALESCE(available_tons,0)>0
       AND (commercial_valid_until IS NULL OR commercial_valid_until>=CURRENT_DATE)
     ORDER BY COALESCE(sourcing_score,0) DESC,
              COALESCE(source_price_usd_ton,999999999) ASC,
@@ -247,7 +249,7 @@ export async function generateDemandMatches(opportunityId: number) {
     supplyCandidates: supplyCandidates.slice(0, 30),
     rules: {
       inventoryAccounting: "As emissões corporativas permanecem reportadas separadamente dos offsets.",
-      exclusiveClaim: "Somente créditos elegíveis e aposentados para o beneficiário podem sustentar claim de compensação.",
+      exclusiveClaim: "Somente créditos elegíveis, comercialmente disponíveis e aposentados para o beneficiário podem sustentar claim de compensação.",
       supplyDesk: "Inventário com mandato comercial não é automaticamente claim-ready; passa pelo gate de elegibilidade antes da venda como compensação.",
     },
   };
