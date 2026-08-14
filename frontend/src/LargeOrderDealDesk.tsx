@@ -121,7 +121,12 @@ function DealDeskPanel(){
   }
 
   async function confirmSource(){
-    if(!assistedQuote?.id)return;if(!sourceCostBrl||!sourceReference||!sourceAvailableKg){setMessage("Informe custo total da fonte, referência da confirmação e estoque confirmado.");return}
+    if(!assistedQuote?.id)return;
+    const missing:string[]=[];
+    if(!sourceCostBrl||Number(sourceCostBrl)<=0) missing.push("custo total confirmado da fonte");
+    if(!sourceReference.trim()) missing.push("referência da confirmação");
+    if(n(sourceAvailableKg)<requestedKg) missing.push(`estoque confirmado de pelo menos ${requestedKg.toLocaleString("pt-BR")} kg`);
+    if(missing.length){setMessage(`Antes de confirmar, falta: ${missing.join(" · ")}. O preço/estoque monitorados acima são indicativos e não substituem a confirmação da fonte.`);return}
     setBusy(true);setMessage("");
     try{
       const confirmed=await api<Json>(`/admin/market/assisted-sourcing/${assistedQuote.id}/confirm-source`,{method:"POST",body:JSON.stringify({sourceCostBrl:Number(sourceCostBrl),sourceReference,sourceEvidenceUrl:sourceEvidenceUrl||null,sourceAvailableKg:Number(sourceAvailableKg),quoteTtlMinutes:Number(quoteTtlMinutes)||30,notes:sourceNotes||null})});
@@ -194,13 +199,14 @@ function DealDeskPanel(){
         <div className="deal-source-head"><div><small>QUOTE ASSISTIDA</small><b>{String(assistedQuote.public_code||"").slice(0,8)} · {assistedQuote.status}</b><span>{assistedQuote.project_name} · {assistedQuote.registry} · vintage {assistedQuote.vintage||"n/d"}</span></div><strong>{tons(requestedKg/1000)} t</strong></div>
         <div className="deal-monitor"><span><small>DISPONÍVEL MONITORADO</small><b>{assistedQuote.available_tons==null?"n/d":`${tons(assistedQuote.available_tons)} t`}</b></span><span><small>PREÇO MONITORADO</small><b>{assistedPricing.monitoredSourcePriceUsdTon?`US$ ${n(assistedPricing.monitoredSourcePriceUsdTon).toFixed(2)}/t`:"n/d"}</b></span></div>
         {assistedQuote.sourcePreview&&<a className="deal-source-link" href={assistedQuote.sourcePreview} target="_blank" rel="noreferrer">Abrir fonte/evidência monitorada ↗</a>}
-        {!sourceConfirmed?<div className="deal-source-form"><p><b>Confirmação manual obrigatória.</b> O valor abaixo é o custo TOTAL para adquirir as {tons(requestedKg/1000)} t — não o preço por tonelada.</p>
+        {!sourceConfirmed?<div className="deal-source-form"><p><b>Confirmação manual obrigatória.</b> O preço e o volume monitorados acima são apenas sinais de mercado. Para congelar a operação, confirme o custo TOTAL e uma referência real da fonte para as {tons(requestedKg/1000)} t.</p>
           <label>Custo total confirmado da fonte (R$)<input type="number" min="0.01" step="0.01" value={sourceCostBrl} onChange={e=>setSourceCostBrl(e.target.value)} placeholder="Ex.: 600000,00"/></label>
           <label>Estoque confirmado (kg)<input type="number" min={requestedKg||1} step="1" value={sourceAvailableKg} onChange={e=>setSourceAvailableKg(e.target.value)}/><small>Para 10.000 t, precisa ser no mínimo 10.000.000 kg.</small></label>
           <label>Referência da confirmação<input value={sourceReference} onChange={e=>setSourceReference(e.target.value)} placeholder="ID da cotação, orderbook, e-mail/quote do fornecedor..."/></label>
           <label>URL de evidência<input type="url" value={sourceEvidenceUrl} onChange={e=>setSourceEvidenceUrl(e.target.value)} placeholder="https://... (opcional)"/></label>
           <div className="deal-two"><label>Validade (min)<input type="number" min="5" max="1440" value={quoteTtlMinutes} onChange={e=>setQuoteTtlMinutes(e.target.value)}/></label><label>Notas<input value={sourceNotes} onChange={e=>setSourceNotes(e.target.value)} placeholder="opcional"/></label></div>
-          <button type="button" className="deal-primary full" disabled={busy||!sourceCostBrl||!sourceReference||n(sourceAvailableKg)<requestedKg} onClick={()=>void confirmSource()}>{busy?"Confirmando...":"Confirmar fonte, estoque e custo"}</button>
+          <button type="button" className="deal-primary full" disabled={busy} onClick={()=>void confirmSource()}>{busy?"Confirmando...":"Validar e confirmar fonte, estoque e custo"}</button>
+          <small>Você pode clicar mesmo com campos incompletos; o EcoTracker informará exatamente o que falta. Nenhum preço monitorado será promovido silenciosamente a preço executável.</small>
         </div>:<div className="deal-source-confirmed"><b>FONTE CONFIRMADA · REPRIFICADA</b><div className="deal-kpis"><span><small>Custo fonte</small><b>{money(assistedQuote.source_cost_brl)}</b></span><span><small>Preço venda</small><b>{money(assistedQuote.final_total)}</b></span><span><small>Preço / t</small><b>{money(n(assistedQuote.final_total)/(requestedKg/1000))}</b></span></div><small>Referência: {assistedQuote.sourcing_reference||"—"} · validade até {assistedQuote.quote_expires_at?new Date(assistedQuote.quote_expires_at).toLocaleString("pt-BR"):"n/d"}</small></div>}
         {sourceConfirmed&&!assistedReviewCurrent&&<div className="deal-reapproval"><b>NOVA APROVAÇÃO OBRIGATÓRIA</b><span>A confirmação da fonte alterou o preço executável. A aprovação da proposta anterior não libera checkout.</span><button type="button" className="deal-primary full" disabled={busy} onClick={()=>void approveRepricedQuote()}>{busy?"Aprovando...":"Aprovar cotação reprificada"}</button></div>}
         {sourceConfirmed&&assistedReviewCurrent&&<div className="deal-execution-ready"><b>COTAÇÃO COMERCIALMENTE APROVADA</b><span>SHA {String(sourceReview?.review?.snapshot_sha256||assistedQuote.commercial_review_sha256||"").slice(0,16)}…</span><small>Fonte + estoque + custo + preço estão congelados. Agora o contrato do cliente é obrigatório antes do pagamento.</small></div>}
