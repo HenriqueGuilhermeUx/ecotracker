@@ -23,6 +23,34 @@ function fail(res:Response,error:unknown) {
   });
 }
 
+async function invalidateStaleAssistedQuotes() {
+  return withTransaction(async (client) => {
+    const staleQuotes = await client.query(`
+      UPDATE quote_requests q SET
+        status='cancelled',
+        sourcing_status='invalidated',
+        automation_enabled=FALSE,
+        admin_notes=CONCAT_WS(E'\n',NULLIF(q.admin_notes,''),
+          'AUTO-INVALIDATED: ativo deixou de ser claim-ready/comercialmente disponível em sincronização posterior.'),
+        updated_at=NOW()
+      FROM monitored_assets a
+      WHERE q.asset_id=a.id
+        AND q.automation_enabled=FALSE
+        AND q.payment_status='not_started'
+        AND q.status IN ('requested','quoted')
+        AND (
+          a.active IS DISTINCT FROM TRUE OR
+          a.claim_category<>'voluntary_offset' OR
+          a.eligibility_status<>'eligible' OR
+          a.source_unit_status<>'tradable' OR
+          a.availability_status NOT IN ('confirmed','indicative') OR
+          COALESCE(a.available_tons,0)<=0
+        )
+      RETURNING q.id`);
+    return staleQuotes.rowCount || 0;
+  });
+}
+
 async function supersedePrePaymentArtifacts(opportunityId:number) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(`
@@ -68,34 +96,6 @@ async function supersedePrePaymentArtifacts(opportunityId:number) {
         WHERE id=$1`, [row.id]);
       proposalsSuperseded += 1;
     }
-
-    // Quotes assistidas de outras oportunidades também podem ter sido abertas antes
-    // da atualização da disponibilidade do ativo. Se o ativo deixou de ser elegível,
-    // tradable ou comercialmente disponível, a quote pré-pagamento é cancelada e
-    // preservada apenas para auditoria. Quotes com pagamento iniciado nunca são tocadas.
-    const staleQuotes = await client.query(`
-      UPDATE quote_requests q SET
-        status='cancelled',
-        sourcing_status='invalidated',
-        automation_enabled=FALSE,
-        admin_notes=CONCAT_WS(E'\n',NULLIF(q.admin_notes,''),
-          'AUTO-INVALIDATED: ativo deixou de ser claim-ready/comercialmente disponível em sincronização posterior.'),
-        updated_at=NOW()
-      FROM monitored_assets a
-      WHERE q.asset_id=a.id
-        AND q.automation_enabled=FALSE
-        AND q.payment_status='not_started'
-        AND q.status IN ('requested','quoted')
-        AND (
-          a.active IS DISTINCT FROM TRUE OR
-          a.claim_category<>'voluntary_offset' OR
-          a.eligibility_status<>'eligible' OR
-          a.source_unit_status<>'tradable' OR
-          a.availability_status NOT IN ('confirmed','indicative') OR
-          COALESCE(a.available_tons,0)<=0
-        )
-      RETURNING q.id`);
-    quotesCancelled += staleQuotes.rowCount || 0;
 
     await client.query(`
       UPDATE demand_opportunities
@@ -162,10 +162,16 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
       }
 
       const matching = await generateDemandMatches(opportunityId);
+      const staleAssistedQuotesCancelled = await invalidateStaleAssistedQuotes();
       const gapTonnes = Number(matching.uncoveredTonnes || 0);
-      const invalidated = gapTonnes > 0.001
+      const coverageInvalidated = gapTonnes > 0.001
         ? await supersedePrePaymentArtifacts(opportunityId)
         : { proposalsSuperseded:0, quotesCancelled:0 };
+      const invalidated = {
+        ...coverageInvalidated,
+        staleAssistedQuotesCancelled,
+        totalQuotesCancelled: coverageInvalidated.quotesCancelled + staleAssistedQuotesCancelled,
+      };
 
       const result = await upsertDemandSupplyRfq({
         opportunityId,
