@@ -10,6 +10,8 @@ import {
   upsertDemandSupplyRfq,
 } from "./demand-supply-rfq.js";
 import { generateDemandMatches } from "./demand-matching.js";
+import { enrichGoldStandardMarketplaceAssets } from "./gold-standard-enrichment.js";
+import { refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 
 const one = (value:string|string[]|undefined) => Array.isArray(value) ? value[0] : value || "";
 
@@ -61,6 +63,20 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
   app.post("/api/admin/demand/opportunities/:id/rfq",requireAdmin,async (req:Request,res:Response) => {
     try {
       const opportunityId = Number(one(req.params.id));
+      // Large corporate matching must not rely on a stale Gold Standard snapshot.
+      // Force refresh + enrichment and fail closed if the source cannot be verified now.
+      try {
+        await refreshGoldStandardMarketplace();
+        await enrichGoldStandardMarketplaceAssets();
+      } catch (error) {
+        console.warn("[demand-rfq] Gold Standard pre-match refresh failed", error);
+        return res.status(503).json({
+          error:"Não foi possível sincronizar o Gold Standard agora. O matching corporativo foi bloqueado para não usar disponibilidade stale.",
+          code:"GOLD_STANDARD_REFRESH_REQUIRED",
+          detail:error instanceof Error ? error.message : "Falha ao sincronizar Gold Standard",
+        });
+      }
+
       const matching = await generateDemandMatches(opportunityId);
       const result = await upsertDemandSupplyRfq({
         opportunityId,

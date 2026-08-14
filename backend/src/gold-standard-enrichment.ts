@@ -7,6 +7,7 @@ type CatalogDetails = {
   vintages: number[];
   location: string | null;
   projectType: string | null;
+  storefrontUnavailable: boolean;
   found: boolean;
 };
 
@@ -89,7 +90,7 @@ async function fetchCatalogPages(): Promise<string[]> {
   const results: string[] = [];
   for (let page = 1; page <= pages; page += 1) {
     const suffix = page === 1 ? "" : `?page=${page}`;
-    // A homepage é o catálogo público que publica explicitamente
+    // A homepage é o catálogo público que publica explicitamente preço, status,
     // "In stock (N units)", LOCATION, VINTAGES e PROJECT TYPE.
     const response = await fetch(`${baseUrl()}/${suffix}`, {
       headers: {
@@ -124,16 +125,22 @@ function extractAroundTitle(pageText: string, projectName: string): string | nul
 }
 
 function detailsFromSegment(segment: string | null): CatalogDetails {
-  if (!segment) return { stockTons: null, vintages: [], location: null, projectType: null, found: false };
+  if (!segment) return { stockTons: null, vintages: [], location: null, projectType: null, storefrontUnavailable: false, found: false };
   const stockMatch = segment.match(/in stock\s*\(([\d,]+)\s*units?\)/i);
   const vintagesMatch = segment.match(/vintages?\s*:\s*((?:19|20)\d{2}(?:\s*\|\s*(?:19|20)\d{2})*)/i);
   const locationMatch = segment.match(/location\s*:\s*([^|]{2,120}?)(?=\s+vintages?\s*:|\s+project type\s*:|\s+add to cart|$)/i);
   const typeMatch = segment.match(/project type\s*:\s*(.{2,120}?)(?=\s+add to cart|\s+view details|$)/i);
+  const boundaries = [segment.indexOf(" location:"), segment.indexOf(" vintages:"), segment.indexOf(" project type:")]
+    .filter((index) => index > 0);
+  const statusEnd = boundaries.length ? Math.min(...boundaries) : Math.min(segment.length, 900);
+  const statusWindow = segment.slice(0, Math.max(200, Math.min(statusEnd, 900)));
+  const storefrontUnavailable = /\bunavailable\b|\bbackordered\b|\bout of stock\b/i.test(statusWindow);
   return {
     stockTons: parseNumber(stockMatch?.[1]),
     vintages: parseYears(vintagesMatch?.[1]),
     location: locationMatch?.[1]?.trim() || null,
     projectType: typeMatch?.[1]?.trim() || null,
+    storefrontUnavailable,
     found: true,
   };
 }
@@ -143,7 +150,7 @@ function catalogDetails(pages: string[], projectName: string): CatalogDetails {
     const details = detailsFromSegment(extractAroundTitle(page, projectName));
     if (details.found && (details.vintages.length || details.stockTons != null)) return details;
   }
-  return { stockTons: null, vintages: [], location: null, projectType: null, found: false };
+  return { stockTons: null, vintages: [], location: null, projectType: null, storefrontUnavailable: false, found: false };
 }
 
 function existingFlags(value: unknown): string[] {
@@ -188,10 +195,11 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
     enriched += 1;
 
     const marketplace = objectAt(asset.monitor_details);
-    // products.json/variant.available is the commercial truth. The catalog may still
-    // expose an inventory number for a backordered/unavailable product; that number
-    // remains monitoring evidence and must never be promoted to sellable capacity.
-    const storefrontAvailable = boolAt(marketplace.storefrontAvailable);
+    // Defesa em profundidade: o sinal técnico de products.json nunca pode vencer um
+    // estado comercial explícito visível no storefront. Alguns produtos exibem
+    // quantidade de catálogo ao mesmo tempo em que aparecem como Unavailable/backordered.
+    const shopifyStorefrontAvailable = boolAt(marketplace.storefrontAvailable);
+    const storefrontAvailable = shopifyStorefrontAvailable && !details.storefrontUnavailable;
     const stock = details.stockTons;
     const vintages = details.vintages;
     const oldest = vintages[0] || null;
@@ -204,10 +212,6 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
     if (allVintagesWithinPolicy) recentVintageCandidates += 1;
     if (verified) verifiedAssisted += 1;
 
-    // O marketplace oficial garante retirement no Impact Registry, certificate e
-    // Retirement Attribution ao beneficiário. A execução segue assistida: isso
-    // habilita o claim de compensação somente quando o storefront também informa
-    // disponibilidade comercial atual.
     const nextFlags = [
       "gold-standard-marketplace-execution-assisted",
       "gold-standard-commerce-api-not-integrated",
@@ -221,6 +225,8 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
     const riskFlags = mergeFlags(asset.eligibility_risk_flags, nextFlags);
     const enrichment = {
       source: `${baseUrl()}/`,
+      shopifyStorefrontAvailable,
+      visibleStorefrontUnavailable: details.storefrontUnavailable,
       storefrontAvailable,
       catalogStockTonnes: stock,
       commercialStockTonnes: commercialStock,
@@ -274,7 +280,7 @@ export async function enrichGoldStandardMarketplaceAssets(): Promise<GoldStandar
       verified ? "eligible" : "restricted",
       verified
         ? "Oferta pública Gold Standard comercialmente disponível no storefront, com estoque e todas as vintages dentro da política EcoTracker. O próprio Gold Standard aposenta os créditos no Impact Registry, permite Retirement Attribution e emite Retirement Certificate. Execução EcoTracker permanece assistida; a vintage efetivamente alocada deve ser confirmada no certificado antes do fulfillment final."
-        : "Oferta Gold Standard monitorada. Permanece fora da prateleira de compensação até disponibilidade comercial atual, estoque, vintage e evidência satisfazerem integralmente a política EcoTracker.",
+        : "Oferta Gold Standard monitorada. Permanece fora da prateleira de compensação enquanto o storefront estiver indisponível/backordered ou até estoque, vintage e evidência satisfazerem integralmente a política EcoTracker.",
       storefrontAvailable && hasStock ? "tradable" : "unknown",
       vintageStart,
       vintageEnd,
