@@ -10,6 +10,8 @@ import {
   upsertDemandSupplyRfq,
 } from "./demand-supply-rfq.js";
 import { generateDemandMatches } from "./demand-matching.js";
+import { enrichGoldStandardMarketplaceAssets } from "./gold-standard-enrichment.js";
+import { refreshGoldStandardMarketplace } from "./gold-standard-marketplace.js";
 
 const one = (value:string|string[]|undefined) => Array.isArray(value) ? value[0] : value || "";
 
@@ -61,6 +63,19 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
   app.post("/api/admin/demand/opportunities/:id/rfq",requireAdmin,async (req:Request,res:Response) => {
     try {
       const opportunityId = Number(one(req.params.id));
+      // Large corporate matching must not rely on a stale Gold Standard snapshot.
+      // Force the public-market refresh + visible-storefront enrichment before coverage.
+      // If Gold Standard is temporarily unreachable, stale GS rows are excluded by
+      // demand-matching freshness policy; other providers remain eligible.
+      let goldStandardRefreshError:string|null = null;
+      try {
+        await refreshGoldStandardMarketplace();
+        await enrichGoldStandardMarketplaceAssets();
+      } catch (error) {
+        goldStandardRefreshError = error instanceof Error ? error.message : "Falha ao sincronizar Gold Standard";
+        console.warn("[demand-rfq] Gold Standard pre-match refresh failed", error);
+      }
+
       const matching = await generateDemandMatches(opportunityId);
       const result = await upsertDemandSupplyRfq({
         opportunityId,
@@ -70,9 +85,9 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
         source:"manual_admin",
       });
       if (!result && Number(matching.uncoveredTonnes || 0)<=0.001) {
-        return res.json({resolved:true,message:"Oportunidade já possui cobertura claim-ready integral; nenhum RFQ aberto.",matching});
+        return res.json({resolved:true,message:"Oportunidade já possui cobertura claim-ready integral; nenhum RFQ aberto.",matching,goldStandardRefreshError});
       }
-      return res.status(201).json({rfq:result,matching});
+      return res.status(201).json({rfq:result,matching,goldStandardRefreshError});
     } catch (error) { return fail(res,error); }
   });
 }
