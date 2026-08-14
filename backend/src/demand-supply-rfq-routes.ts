@@ -64,16 +64,17 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
     try {
       const opportunityId = Number(one(req.params.id));
       // Large corporate matching must not rely on a stale Gold Standard snapshot.
-      // Force the public-market refresh + visible-storefront enrichment before coverage.
-      // If Gold Standard is temporarily unreachable, stale GS rows are excluded by
-      // demand-matching freshness policy; other providers remain eligible.
-      let goldStandardRefreshError:string|null = null;
+      // Force refresh + enrichment and fail closed if the source cannot be verified now.
       try {
         await refreshGoldStandardMarketplace();
         await enrichGoldStandardMarketplaceAssets();
       } catch (error) {
-        goldStandardRefreshError = error instanceof Error ? error.message : "Falha ao sincronizar Gold Standard";
         console.warn("[demand-rfq] Gold Standard pre-match refresh failed", error);
+        return res.status(503).json({
+          error:"Não foi possível sincronizar o Gold Standard agora. O matching corporativo foi bloqueado para não usar disponibilidade stale.",
+          code:"GOLD_STANDARD_REFRESH_REQUIRED",
+          detail:error instanceof Error ? error.message : "Falha ao sincronizar Gold Standard",
+        });
       }
 
       const matching = await generateDemandMatches(opportunityId);
@@ -85,9 +86,9 @@ export function registerDemandSupplyRfqRoutes(app:Application) {
         source:"manual_admin",
       });
       if (!result && Number(matching.uncoveredTonnes || 0)<=0.001) {
-        return res.json({resolved:true,message:"Oportunidade já possui cobertura claim-ready integral; nenhum RFQ aberto.",matching,goldStandardRefreshError});
+        return res.json({resolved:true,message:"Oportunidade já possui cobertura claim-ready integral; nenhum RFQ aberto.",matching});
       }
-      return res.status(201).json({rfq:result,matching,goldStandardRefreshError});
+      return res.status(201).json({rfq:result,matching});
     } catch (error) { return fail(res,error); }
   });
 }
