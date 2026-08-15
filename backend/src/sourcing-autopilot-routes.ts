@@ -4,9 +4,18 @@ import { requireAdmin } from "./auth.js";
 import { pool } from "./db.js";
 import { getSourcingSummary } from "./sourcing-engine.js";
 import { getSourcingAutopilotStatus, runSourcingAutopilot } from "./sourcing-autopilot.js";
+import {
+  getOpenRfqResolutionStatus,
+  getRfqResolutionAutopilot,
+  runRfqResolutionAutopilot,
+  startRfqResolutionAutopilot,
+} from "./rfq-resolution-autopilot.js";
 
-const fail = (res: Response, error: unknown) =>
-  res.status(500).json({ error: error instanceof Error ? error.message : "Erro interno" });
+const fail = (res: Response, error: unknown) => {
+  const status = typeof error === "object" && error && "status" in error ? Number((error as { status: unknown }).status) : 500;
+  return res.status(Number.isFinite(status) && status >= 400 && status <= 599 ? status : 500)
+    .json({ error: error instanceof Error ? error.message : "Erro interno" });
+};
 
 export function registerSourcingAutopilotRoutes(app: Application) {
   app.get("/api/market/sourcing/health", async (_req: Request, res: Response) => {
@@ -58,4 +67,34 @@ export function registerSourcingAutopilotRoutes(app: Application) {
       res.json(rows);
     } catch (error) { fail(res, error); }
   });
+
+  // Deal-focused autopilot: the operator should not manually probe listings one by one.
+  app.get("/api/admin/market-maker/rfq-resolution-autopilot", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ items: await getOpenRfqResolutionStatus(limit) });
+    } catch (error) { fail(res, error); }
+  });
+
+  app.get("/api/admin/market-maker/rfqs/:id/resolution-autopilot", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const rfqId = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+      if (!Number.isInteger(rfqId) || rfqId <= 0) return res.status(400).json({ error: "RFQ inválido" });
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await getRfqResolutionAutopilot(rfqId));
+    } catch (error) { fail(res, error); }
+  });
+
+  app.post("/api/admin/market-maker/rfqs/:id/resolution-autopilot/run", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const rfqId = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+      if (!Number.isInteger(rfqId) || rfqId <= 0) return res.status(400).json({ error: "RFQ inválido" });
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await runRfqResolutionAutopilot(rfqId));
+    } catch (error) { fail(res, error); }
+  });
+
+  // Starts only safe provider probes. Production order/payment/retirement gates remain untouched.
+  startRfqResolutionAutopilot();
 }
