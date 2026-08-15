@@ -21,10 +21,18 @@ assert.match(routes, /rfq-resolution-autopilot/);
 assert.match(routes, /status\(202\)/);
 assert.match(routes, /startRfqResolutionAutopilot/);
 
-assert.match(sell, /Eu só quero vender/);
-assert.match(sell, /SUPPLY ENCONTRADO/);
-assert.match(sell, /AINDA NÃO FECHA/);
-assert.match(sell, /NÃO FECHA AGORA/);
-assert.match(sell, /EcoTracker assumiu o sourcing/);
+// Sell Desk is intentionally customer-safe. Internal sourcing economics stay hidden.
+assert.match(sell, /Informação pronta para o cliente/);
+assert.match(sell, /PRONTO PARA CLIENTE/);
+assert.match(sell, /Copiar resumo para cliente/);
+assert.match(sell, /Preço por tonelada/);
+assert.match(sell, /Valor total/);
+assert.match(sell, /Ver evidência do projeto/);
+assert.match(sell, /review_eligible_now === true/);
+assert.match(sell, /review_status === "approved"/);
+assert.doesNotMatch(sell, /Custo provider do gap/);
+assert.doesNotMatch(sell, /Custo médio provider/);
+assert.doesNotMatch(sell, /Legs encontradas/);
+assert.doesNotMatch(sell, /Provider provou/);
 
-console.log("RFQ resolution autopilot safety smoke OK");
+console.log("RFQ resolution autopilot + client-safe Sell Desk smoke OK");
