@@ -214,7 +214,7 @@ export async function approveMarketSignalEligibility(input:ApprovalInput){
     const evidence=String(input.registryEvidenceUrl||row.registry_evidence_url||row.source_url||"").trim();
     const basis=String(input.eligibilityBasis).trim();
     const ccpStatus=input.ccpStatus||"not_assessed";
-    const granularity=Math.max(1,Math.round(num(input.retirementGranularityKg,row.retirement_granularity_kg||1000)));
+    const granularity=Math.max(1,Math.round(num(input.retirementGranularityKg,num(row.retirement_granularity_kg,1000))));
     const {rows:updatedRows}=await client.query(`
       UPDATE monitored_assets SET
         claim_category='voluntary_offset',eligibility_status='eligible',eligibility_basis=$2,
