@@ -30,14 +30,13 @@ export function SellDesk() {
     try {
       const data = await api<Json>("/admin/market-maker/rfq-resolution-autopilot?limit=100");
       setItems(Array.isArray(data?.items) ? data.items : []);
-      setMessage("");
     } catch (error) { setMessage((error as Error).message); }
     finally { setLoading(false); }
   }, [token]);
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 30000);
+    const timer = window.setInterval(() => void load(), 15000);
     return () => window.clearInterval(timer);
   }, [load]);
 
@@ -45,9 +44,9 @@ export function SellDesk() {
     setBusy(String(rfqId)); setMessage("");
     try {
       await api(`/admin/market-maker/rfqs/${rfqId}/resolution-autopilot/run`, { method: "POST", body: "{}" });
-      await load();
-    } catch (error) { setMessage((error as Error).message); }
-    finally { setBusy(""); }
+      setMessage("EcoTracker assumiu o sourcing. Você pode sair desta tela; o resultado atualiza sozinho.");
+      window.setTimeout(() => { void load(); setBusy(""); }, 4000);
+    } catch (error) { setMessage((error as Error).message); setBusy(""); }
   }
 
   if (!token) return <MarketShell><main className="carbon-desk"><div className="desk-notice">Entre uma vez na <a href="#carbon-desk">Carbon Desk</a>. Depois volte para <b>Vender</b>.</div></main></MarketShell>;
@@ -73,11 +72,11 @@ export function SellDesk() {
             <span><small>Claim-ready hoje</small><b>{tons(item.covered_tonnes)} t</b></span>
             <span><small>Provider provou</small><b>{tons(quotableT)} t</b></span>
             <span><small>Potencial coberto</small><b>{tons(potentialT)} t</b></span>
-            <span className="gap"><small>Ainda falta</small><b>{tons(remainingT || item.gap_tonnes)} t</b></span>
+            <span className="gap"><small>Ainda falta</small><b>{tons(item.autopilot_status ? remainingT : item.gap_tonnes)} t</b></span>
           </div>
           <p>{v.text}</p>
           {n(item.total_cost_usdc) > 0 && <div className="row-metrics"><span><small>Custo provider do gap</small><b>{usd(item.total_cost_usdc)}</b></span><span><small>Custo médio provider</small><b>{usd(item.avg_cost_usdc_tonne)}/t</b></span><span><small>Legs encontradas</small><b>{Array.isArray(summary.legs) ? summary.legs.length : "—"}</b></span></div>}
-          <footer><small>Último ciclo: {dateTime(item.completed_at)} · produção continua bloqueada</small><div className="row-actions"><button disabled={!!busy} onClick={() => void run(Number(item.rfq_id))}>{busy === String(item.rfq_id) ? "EcoTracker resolvendo..." : "Resolver agora"}</button></div></footer>
+          <footer><small>Último ciclo: {dateTime(item.completed_at)} · produção continua bloqueada</small><div className="row-actions"><button disabled={!!busy} onClick={() => void run(Number(item.rfq_id))}>{busy === String(item.rfq_id) ? "EcoTracker assumiu..." : "Resolver agora"}</button></div></footer>
         </article>;
       })}
       {!items.length && <div className="empty">Nenhum RFQ com gap aberto. Quando entrar uma demanda, o autopilot assume o sourcing.</div>}
