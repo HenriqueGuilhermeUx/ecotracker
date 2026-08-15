@@ -4,6 +4,8 @@ import fs from "node:fs";
 const core = fs.readFileSync(new URL("../src/rfq-resolution-autopilot.ts", import.meta.url), "utf8");
 const routes = fs.readFileSync(new URL("../src/sourcing-autopilot-routes.ts", import.meta.url), "utf8");
 const sell = fs.readFileSync(new URL("../../frontend/src/SellDesk.tsx", import.meta.url), "utf8");
+const drawer = fs.readFileSync(new URL("../../frontend/src/SellDetailDrawer.tsx", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../../frontend/src/sell-desk.css", import.meta.url), "utf8");
 
 assert.match(core, /createCarbonmarkShadowQuote/);
 assert.match(core, /findQuotableCapacity/);
@@ -21,18 +23,30 @@ assert.match(routes, /rfq-resolution-autopilot/);
 assert.match(routes, /status\(202\)/);
 assert.match(routes, /startRfqResolutionAutopilot/);
 
-// Sell Desk is intentionally customer-safe. Internal sourcing economics stay hidden.
+// Central Sell Desk stays commercial and action-oriented.
 assert.match(sell, /Informação pronta para o cliente/);
 assert.match(sell, /PRONTO PARA CLIENTE/);
-assert.match(sell, /Copiar resumo para cliente/);
-assert.match(sell, /Preço por tonelada/);
-assert.match(sell, /Valor total/);
-assert.match(sell, /Ver evidência do projeto/);
+assert.match(sell, /Copiar resumo/);
+assert.match(sell, /Contatar cliente/);
+assert.match(sell, /Acompanhar/);
+assert.match(sell, /Nova ordem/);
 assert.match(sell, /review_eligible_now === true/);
 assert.match(sell, /review_status === "approved"/);
-assert.doesNotMatch(sell, /Custo provider do gap/);
-assert.doesNotMatch(sell, /Custo médio provider/);
-assert.doesNotMatch(sell, /Legs encontradas/);
-assert.doesNotMatch(sell, /Provider provou/);
+assert.match(sell, /SellDetailDrawer/);
+assert.doesNotMatch(sell, /Custo de aquisição/);
+assert.doesNotMatch(sell, /Custo observado/);
+assert.doesNotMatch(sell, /Provider cotável/);
 
-console.log("RFQ resolution autopilot + client-safe Sell Desk smoke OK");
+// Internal economics and sourcing diagnostics are allowed only inside the admin drawer.
+assert.match(drawer, /SOMENTE ADM/);
+assert.match(drawer, /Custo de aquisição/);
+assert.match(drawer, /Provider cotável/);
+assert.match(drawer, /Custo observado/);
+assert.match(drawer, /Acompanhamento operacional/);
+assert.match(drawer, /Contato do cliente/);
+assert.match(drawer, /Acelerar validação/);
+assert.match(styles, /sell-drawer-layer/);
+assert.match(styles, /sell-card-grid/);
+assert.match(styles, /sell-kpis/);
+
+console.log("RFQ resolution autopilot + admin sales cockpit smoke OK");
