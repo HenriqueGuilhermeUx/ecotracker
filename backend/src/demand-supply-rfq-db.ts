@@ -32,10 +32,11 @@ export async function initDemandSupplyRfqDb(): Promise<void> {
       id BIGSERIAL PRIMARY KEY,
       public_code UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
       rfq_id BIGINT NOT NULL REFERENCES market_maker_rfqs(id) ON DELETE CASCADE,
-      candidate_type VARCHAR(40) NOT NULL CHECK (candidate_type IN ('mandated_inventory','seller_confirmed','registry_estimate')),
+      candidate_type VARCHAR(40) NOT NULL,
       candidate_key VARCHAR(255) NOT NULL,
       supply_lead_id BIGINT REFERENCES supply_leads(id) ON DELETE SET NULL,
       supply_inventory_id BIGINT REFERENCES supply_inventory(id) ON DELETE SET NULL,
+      monitored_asset_id BIGINT REFERENCES monitored_assets(id) ON DELETE SET NULL,
       registry VARCHAR(80),
       registry_project_id VARCHAR(180),
       project_name VARCHAR(255),
@@ -55,9 +56,20 @@ export async function initDemandSupplyRfqDb(): Promise<void> {
       UNIQUE(rfq_id,candidate_type,candidate_key)
     );
 
+    ALTER TABLE market_maker_rfq_candidates
+      ADD COLUMN IF NOT EXISTS monitored_asset_id BIGINT REFERENCES monitored_assets(id) ON DELETE SET NULL;
+
+    ALTER TABLE market_maker_rfq_candidates
+      DROP CONSTRAINT IF EXISTS market_maker_rfq_candidates_candidate_type_check;
+    ALTER TABLE market_maker_rfq_candidates
+      ADD CONSTRAINT market_maker_rfq_candidates_candidate_type_check
+      CHECK (candidate_type IN ('mandated_inventory','seller_confirmed','registry_estimate','market_signal'));
+
     CREATE INDEX IF NOT EXISTS market_maker_rfqs_pipeline_idx
       ON market_maker_rfqs(status,priority_score DESC,gap_tonnes DESC,updated_at DESC);
     CREATE INDEX IF NOT EXISTS market_maker_rfq_candidates_rank_idx
       ON market_maker_rfq_candidates(rfq_id,status,sourcing_score DESC,candidate_tonnes DESC);
+    CREATE INDEX IF NOT EXISTS market_maker_rfq_candidates_asset_idx
+      ON market_maker_rfq_candidates(monitored_asset_id) WHERE monitored_asset_id IS NOT NULL;
   `);
 }
