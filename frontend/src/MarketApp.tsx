@@ -8,6 +8,7 @@ import { LargeOrderDealDesk } from "./LargeOrderDealDesk";
 import { MarketCatalog } from "./MarketCatalog";
 import { MarketAdmin } from "./MarketAdmin";
 import { MarketShell } from "./MarketShell";
+import { SellDesk } from "./SellDesk";
 import "./market.css";
 import "./market-live.css";
 import "./commerce.css";
@@ -35,5 +36,6 @@ export default function MarketApp() {
   if (page === "carbon-desk") return <CarbonDesk />;
   if (page === "carbonmark-rail") return <CarbonmarkRailPage />;
   if (page === "deal-desk") return <LargeOrderDealDesk />;
+  if (page === "sell") return <SellDesk />;
   return <LegacyApp />;
 }
