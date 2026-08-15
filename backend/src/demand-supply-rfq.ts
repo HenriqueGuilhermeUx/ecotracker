@@ -111,7 +111,7 @@ export async function refreshDemandSupplyRfqCandidates(rfqId:number) {
       ]);
     }
 
-    // Market signals bridge the gap between a live marketplace/registry observation and
+    // Market signals bridge the gap between a marketplace/provider observation and
     // claim-ready inventory. They are discovery candidates only: never auto-close an RFQ,
     // never represent seller-confirmed supply and still require explicit eligibility review.
     const marketSignals = await client.query(`
@@ -148,9 +148,9 @@ export async function refreshDemandSupplyRfqCandidates(rfqId:number) {
       const price = num(row.source_price_usd_ton,0);
       if (maxPrice>0 && price>maxPrice) score -= 30;
       score = Math.max(0,Math.min(100,score));
-      const confidence = String(row.availability_status)==="confirmed" ? "market_confirmed"
-        : String(row.availability_status)==="indicative" ? "market_indicative"
-        : "market_connected_signal";
+      const confidence = String(row.availability_status)==="confirmed" ? "marketplace_observed"
+        : String(row.availability_status)==="indicative" ? "marketplace_indicative"
+        : "provider_connected_signal";
       await client.query(`
         INSERT INTO market_maker_rfq_candidates(
           rfq_id,candidate_type,candidate_key,monitored_asset_id,registry,registry_project_id,project_name,country,vintage,
@@ -167,8 +167,8 @@ export async function refreshDemandSupplyRfqCandidates(rfqId:number) {
           commercialInventoryConfirmed:false,
           claimReady:false,
           eligibilityReviewRequired:true,
-          supplierConfirmationRequired:String(row.availability_status)!=="confirmed",
-          warning:"Market signal only. It cannot close demand until the asset passes EcoTracker eligibility and current commercial availability is reconfirmed.",
+          supplierConfirmationRequired:true,
+          warning:"Market signal only. Marketplace/provider availability is not seller confirmation and cannot close demand until EcoTracker eligibility and current commercial availability are reconfirmed.",
         }),
         JSON.stringify({
           assetId:Number(row.id),
@@ -284,7 +284,28 @@ export async function marketMakerSummary() {
       COUNT(*) FILTER (WHERE status='resolved')::int AS resolved_rfqs
     FROM market_maker_rfqs`);
   const candidates = await pool.query(`
+    WITH keyed AS (
+      SELECT candidate_type,candidate_tonnes,last_checked_at,
+        CASE
+          WHEN candidate_type='mandated_inventory' THEN 'inventory:' || COALESCE(supply_inventory_id::text,candidate_key)
+          WHEN candidate_type IN ('seller_confirmed','registry_estimate') THEN 'lead:' || COALESCE(supply_lead_id::text,candidate_key)
+          WHEN candidate_type='market_signal' THEN 'asset:' || COALESCE(monitored_asset_id::text,candidate_key)
+          ELSE candidate_key
+        END AS economic_key
+      FROM market_maker_rfq_candidates
+      WHERE status<>'stale'
+    ), unique_supply AS (
+      SELECT DISTINCT ON (candidate_type,economic_key)
+        candidate_type,economic_key,candidate_tonnes
+      FROM keyed
+      ORDER BY candidate_type,economic_key,last_checked_at DESC
+    )
     SELECT candidate_type,COUNT(*)::int AS count,COALESCE(SUM(candidate_tonnes),0) AS tonnes
-    FROM market_maker_rfq_candidates WHERE status<>'stale' GROUP BY candidate_type ORDER BY candidate_type`);
-  return {rfqs:rows[0] || {},supplyCandidates:candidates.rows};
+    FROM unique_supply GROUP BY candidate_type ORDER BY candidate_type`);
+  return {
+    rfqs:rows[0] || {},
+    supplyCandidates:candidates.rows,
+    supplyAccounting:"unique_economic_supply",
+    warning:"Supply candidates are deduplicated across RFQs. Market signals remain observed supply, not seller-confirmed or claim-ready inventory.",
+  };
 }
