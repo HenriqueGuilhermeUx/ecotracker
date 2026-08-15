@@ -17,6 +17,11 @@ assert.match(source, /VALUES\(\$1,'market_signal'/);
 assert.match(source, /'identified',FALSE/);
 assert.match(source, /eligibilityReviewRequired:true/);
 assert.match(source, /commercialInventoryConfirmed:false/);
-assert.match(source, /Market signal only\. It cannot close demand/);
+assert.match(source, /supplierConfirmationRequired:true/);
+assert.match(source, /Marketplace\/provider availability is not seller confirmation/);
+assert.match(source, /cannot close demand until EcoTracker eligibility/);
+assert.match(source, /marketplace_observed/);
+assert.match(source, /marketplace_indicative/);
+assert.match(source, /provider_connected_signal/);
 
 console.log("RFQ market signals safety smoke OK");
