@@ -87,12 +87,12 @@ export function registerSourcingAutopilotRoutes(app: Application) {
   });
 
   app.post("/api/admin/market-maker/rfqs/:id/resolution-autopilot/run", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const rfqId = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
-      if (!Number.isInteger(rfqId) || rfqId <= 0) return res.status(400).json({ error: "RFQ inválido" });
-      res.setHeader("Cache-Control", "no-store");
-      res.json(await runRfqResolutionAutopilot(rfqId));
-    } catch (error) { fail(res, error); }
+    const rfqId = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    if (!Number.isInteger(rfqId) || rfqId <= 0) return res.status(400).json({ error: "RFQ inválido" });
+    // Fire-and-forget: capacity search can make several safe quote probes and should not be coupled to a 30s browser timeout.
+    void runRfqResolutionAutopilot(rfqId).catch((error) => console.warn(`[rfq-resolution-autopilot] manual RFQ ${rfqId} failed`, error));
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(202).json({ accepted: true, rfqId, message: "EcoTracker assumiu o sourcing. O resultado aparecerá automaticamente." });
   });
 
   // Starts only safe provider probes. Production order/payment/retirement gates remain untouched.
