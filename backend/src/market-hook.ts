@@ -43,6 +43,8 @@ import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
 import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
 import { initCarbonmarkSandboxCertificationDb } from "./carbonmark-sandbox-certification-db.js";
 import { registerCarbonmarkSandboxCertificationRoutes } from "./carbonmark-sandbox-certification-routes.js";
+import { initMarketSignalQualificationDb } from "./market-signal-qualification-db.js";
+import { registerMarketSignalQualificationRoutes } from "./market-signal-qualification-routes.js";
 import { refreshCarbonmarkIfStale } from "./carbonmark.js";
 import { registerCommerceRoutes } from "./commerce-routes.js";
 import { registerEligibilityRoutes } from "./eligibility-routes.js";
@@ -87,6 +89,7 @@ if (!proto.__marketInstalled) {
     registerCarbonmarkRoutes(app);
     registerCarbonmarkRailRoutes(app);
     registerCarbonmarkSandboxCertificationRoutes(app);
+    registerMarketSignalQualificationRoutes(app);
     registerKlimaX402Routes(app);
     registerGoldStandardRoutes(app);
     registerSourcingRoutes(app);
@@ -132,6 +135,7 @@ if (!proto.__marketInstalled) {
       .then(() => initExecutionReadinessDb())
       .then(() => initDistributionDb())
       .then(() => initCarbonmarkRailDb())
+      .then(() => initMarketSignalQualificationDb())
       .then(() => initCarbonmarkSandboxCertificationDb())
       .then(() => initCommercialOutreachDb())
       .then(() => initCorporateBasketDb())
