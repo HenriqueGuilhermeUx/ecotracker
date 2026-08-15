@@ -62,11 +62,46 @@ async function proposalBundle(client: pg.PoolClient | typeof pool, proposalId:nu
   const proposal = proposalResult.rows[0];
   if (!proposal) return null;
   const items = (await client.query(`
-    SELECT id,asset_id,registry,project_name,vintage,amount_tonnes,source_price_usd_tonne,
-           source_cost_brl,indicative_sale_brl,execution_mode,retirement_supported,evidence_url,item_snapshot
-    FROM demand_proposal_items
-    WHERE proposal_id=$1 ORDER BY id`, [proposalId])).rows;
+    SELECT pi.id,pi.asset_id,pi.registry,pi.project_name,pi.vintage,pi.amount_tonnes,pi.source_price_usd_tonne,
+           pi.source_cost_brl,pi.indicative_sale_brl,pi.execution_mode,pi.retirement_supported,pi.evidence_url,pi.item_snapshot,
+           ma.id AS current_asset_id,ma.active AS current_active,ma.claim_category AS current_claim_category,
+           ma.eligibility_status AS current_eligibility_status,ma.source_unit_status AS current_source_unit_status,
+           ma.availability_status AS current_availability_status,ma.retirement_supported AS current_retirement_supported,
+           ma.available_tons AS current_available_tons,ma.commercial_valid_until AS current_commercial_valid_until,
+           ma.offer_expires_at AS current_offer_expires_at
+    FROM demand_proposal_items pi
+    LEFT JOIN monitored_assets ma ON ma.id=pi.asset_id
+    WHERE pi.proposal_id=$1 ORDER BY pi.id`, [proposalId])).rows;
   return { proposal,items };
+}
+
+function currentProposalProblems(bundle:{proposal:Json;items:Json[]}) {
+  const problems:string[]=[];
+  const p=bundle.proposal;
+  if (String(p.opportunity_status||"")==="sourcing_required") problems.push("oportunidade voltou para sourcing_required");
+  for (const item of bundle.items) {
+    const label=`ativo #${item.asset_id} (${String(item.project_name||item.registry||"lote")})`;
+    if (!item.current_asset_id) { problems.push(`${label}: ativo monitorado não existe mais`); continue; }
+    if (item.current_active!==true) problems.push(`${label}: ativo inativo`);
+    if (String(item.current_claim_category)!=="voluntary_offset") problems.push(`${label}: claim atual não é voluntary_offset`);
+    if (String(item.current_eligibility_status)!=="eligible") problems.push(`${label}: elegibilidade atual não é eligible`);
+    if (String(item.current_source_unit_status)!=="tradable") problems.push(`${label}: unidade atual não está tradable`);
+    if (!["confirmed","indicative"].includes(String(item.current_availability_status))) problems.push(`${label}: disponibilidade atual não é confirmed/indicative`);
+    if (item.current_retirement_supported!==true) problems.push(`${label}: retirement não está confirmado`);
+    if (money(item.current_available_tons)+0.0005 < money(item.amount_tonnes)) problems.push(`${label}: volume atual insuficiente`);
+    if (item.current_commercial_valid_until && new Date(String(item.current_commercial_valid_until)).getTime()<Date.now()-86_400_000) problems.push(`${label}: validade comercial expirada`);
+    if (item.current_offer_expires_at && new Date(String(item.current_offer_expires_at)).getTime()<=Date.now()) problems.push(`${label}: oferta da fonte expirada`);
+  }
+  return problems;
+}
+
+function assertCurrentProposal(bundle:{proposal:Json;items:Json[]}) {
+  const problems=currentProposalProblems(bundle);
+  if (problems.length) {
+    throw Object.assign(new Error("Proposta obsoleta: o supply atual não sustenta mais o snapshot. Refaça o matching antes de aprovar."),{
+      status:409,code:"STALE_PROPOSAL_REQUIRES_REMATCH",problems,
+    });
+  }
 }
 
 function freezeSnapshot(bundle:{proposal:Json;items:Json[]}) {
@@ -164,6 +199,7 @@ export async function approveDemandProposal(input:{proposalId:number;reviewedBy?
     if (!bundle.items.every((item) => Boolean(item.retirement_supported))) {
       throw Object.assign(new Error("Todos os lotes precisam suportar retirement antes da aprovação"),{status:409});
     }
+    assertCurrentProposal(bundle);
     const snapshot = freezeSnapshot(bundle);
     const snapshotHash = sha256(snapshot);
     const actor = actorName(input.reviewedBy);
@@ -234,6 +270,9 @@ export async function createDemandProposalOutbox(input:{proposalId:number;recipi
     if (existing) return existing;
     const review = (await client.query(`SELECT * FROM demand_proposal_reviews WHERE proposal_id=$1 FOR UPDATE`,[input.proposalId])).rows[0];
     if (!review || review.status!=="approved") throw Object.assign(new Error("A proposta precisa de aprovação comercial antes do outbox"),{status:409});
+    const currentBundle = await proposalBundle(client,input.proposalId,true);
+    if (!currentBundle) throw Object.assign(new Error("Proposta não encontrada"),{status:404});
+    assertCurrentProposal(currentBundle);
     const snapshot = review.snapshot as Json;
     const company = (snapshot.company || {}) as Json;
     const email = String(input.recipientEmail || company.contactEmail || "").trim().toLowerCase();
@@ -295,6 +334,10 @@ export async function dispatchDemandOutbox(
     if (row.review_status!=="approved") throw Object.assign(new Error("A aprovação comercial não está válida"),{status:409});
     if (row.expires_at && new Date(row.expires_at).getTime()<=Date.now()) throw Object.assign(new Error("A proposta expirou antes do envio"),{status:409});
     if (row.proposal_status!=="draft" && row.proposal_status!=="sent") throw Object.assign(new Error("Status da proposta não permite envio"),{status:409});
+
+    const currentBundle = await proposalBundle(client,Number(row.proposal_id),true);
+    if (!currentBundle) throw Object.assign(new Error("Proposta não encontrada"),{status:404});
+    assertCurrentProposal(currentBundle);
 
     await client.query(`UPDATE demand_outbox SET status='sending',attempts=attempts+1,last_error=NULL,updated_at=NOW() WHERE id=$1`,[outboxId]);
     try {

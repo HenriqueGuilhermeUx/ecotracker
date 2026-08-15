@@ -1,6 +1,7 @@
 import type { Application, Request, Response } from "express";
 import { z } from "zod";
 import { requireAdmin } from "./auth.js";
+import { pool } from "./db.js";
 import {
   cancelSupplyOutbox,
   createSupplySelectionOutbox,
@@ -17,12 +18,13 @@ const one = (value:string|string[]|undefined) => Array.isArray(value) ? value[0]
 function fail(res:Response,error:unknown) {
   const status = typeof error === "object" && error && "status" in error ? Number((error as {status:unknown}).status) : 500;
   const message = error instanceof Error ? error.message : "Erro interno";
+  const code = typeof error === "object" && error && "code" in error ? String((error as {code:unknown}).code) : undefined;
   const mapped = message.includes("market_maker_supply_selection_overallocated") ? "Volume solicitado ultrapassa o gap ou o volume disponível do candidato"
     : message.includes("market_maker_supply_candidate_wrong_rfq") ? "Candidato não pertence a este RFQ"
     : message.includes("market_maker_rfq_not_open") ? "RFQ não está aberto"
     : message.includes("market_maker_supply_candidate_not_selectable") ? "Candidato de supply não está selecionável"
     : message;
-  return res.status(Number.isFinite(status) && status>=400 && status<=599 ? status : message.startsWith("market_maker_") ? 409 : 500).json({error:mapped});
+  return res.status(Number.isFinite(status) && status>=400 && status<=599 ? status : message.startsWith("market_maker_") ? 409 : 500).json({error:mapped,...(code?{code}:{})});
 }
 
 export function registerSupplyOutreachRoutes(app:Application) {
@@ -50,8 +52,26 @@ export function registerSupplyOutreachRoutes(app:Application) {
     }).safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({error:"Seleção de fornecedor inválida",details:parsed.error.flatten()});
     try {
+      const rfqId=Number(one(req.params.rfqId));
+      const candidateId=Number(one(req.params.candidateId));
+      const candidate=(await pool.query(`
+        SELECT candidate_type,supply_lead_id FROM market_maker_rfq_candidates
+        WHERE id=$1 AND rfq_id=$2`,[candidateId,rfqId])).rows[0];
+      if (!candidate) return res.status(404).json({error:"Candidato de supply não encontrado neste RFQ"});
+      if (String(candidate.candidate_type)==="market_signal") {
+        return res.status(409).json({
+          error:"Sinal de mercado não pode virar RFQ de fornecedor. Primeiro prove a fonte/provider, identifique holder/supply lead e passe pela qualificação comercial.",
+          code:"MARKET_SIGNAL_REQUIRES_QUALIFICATION",
+        });
+      }
+      if (!candidate.supply_lead_id) {
+        return res.status(409).json({
+          error:"Candidato não possui holder/supply lead confirmado para contato.",
+          code:"SUPPLY_LEAD_REQUIRED_FOR_OUTREACH",
+        });
+      }
       return res.status(201).json(await selectSupplyCandidate({
-        rfqId:Number(one(req.params.rfqId)),candidateId:Number(one(req.params.candidateId)),
+        rfqId,candidateId,
         requestedTonnes:parsed.data.requestedTonnes,responseDays:parsed.data.responseDays,
         selectedBy:parsed.data.selectedBy,note:parsed.data.note,
       }));

@@ -8,13 +8,16 @@ import { createDemandProposal } from "./demand-proposal.js";
 const fail = (res: Response, error: unknown) => {
   const status = typeof error === "object" && error && "status" in error ? Number((error as { status: unknown }).status) : 500;
   const message = error instanceof Error ? error.message : "Erro interno";
-  res.status(Number.isFinite(status) && status >= 400 && status <= 599 ? status : 500).json({ error: message });
+  const body:Record<string,unknown>={error:message};
+  if (typeof error === "object" && error && "code" in error) body.code=(error as {code:unknown}).code;
+  if (typeof error === "object" && error && "problems" in error) body.problems=(error as {problems:unknown}).problems;
+  res.status(Number.isFinite(status) && status >= 400 && status <= 599 ? status : 500).json(body);
 };
 
 async function proposalView(idColumn: "p.id" | "p.public_code", id: string | number) {
   const { rows } = await pool.query(`
     SELECT p.*,a.company_name,a.legal_name,a.sector,a.contact_name,a.contact_email,
-           o.claim_purpose,o.target_year,o.target_basis,
+           o.claim_purpose,o.target_year,o.target_basis,o.status AS opportunity_status,
            r.status AS review_status,r.snapshot_sha256,r.reviewed_by,r.approved_at,r.rejected_at,
            ob.id AS outbox_id,ob.status AS outbox_status,ob.recipient_email AS outbox_recipient_email,
            ob.provider_reference AS outreach_provider_reference,ob.sent_at AS outreach_sent_at,
@@ -55,10 +58,31 @@ export function registerDemandProposalRoutes(app: Application) {
       const status = String(req.query.status || "").trim();
       const limit = Math.max(1, Math.min(300, Number(req.query.limit || 100)));
       const { rows } = await pool.query(`
-        SELECT p.*,a.company_name,a.sector,a.contact_name,a.contact_email,o.claim_purpose,o.target_year,
+        SELECT p.*,a.company_name,a.sector,a.contact_name,a.contact_email,o.claim_purpose,o.target_year,o.status AS opportunity_status,
                r.status AS review_status,r.snapshot_sha256,r.reviewed_by,r.approved_at,
                ob.id AS outbox_id,ob.status AS outbox_status,ob.sent_at AS outreach_sent_at,
-               (SELECT COUNT(*) FROM demand_proposal_items pi WHERE pi.proposal_id=p.id)::int AS item_count
+               (SELECT COUNT(*) FROM demand_proposal_items pi WHERE pi.proposal_id=p.id)::int AS item_count,
+               (
+                 o.status<>'sourcing_required'
+                 AND p.expires_at>NOW()
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM demand_proposal_items pi
+                   LEFT JOIN monitored_assets ma ON ma.id=pi.asset_id
+                   WHERE pi.proposal_id=p.id AND (
+                     ma.id IS NULL OR
+                     ma.active IS DISTINCT FROM TRUE OR
+                     ma.claim_category<>'voluntary_offset' OR
+                     ma.eligibility_status<>'eligible' OR
+                     ma.source_unit_status<>'tradable' OR
+                     ma.availability_status NOT IN ('confirmed','indicative') OR
+                     ma.retirement_supported IS DISTINCT FROM TRUE OR
+                     COALESCE(ma.available_tons,0)+0.0005<pi.amount_tonnes OR
+                     (ma.commercial_valid_until IS NOT NULL AND ma.commercial_valid_until<CURRENT_DATE) OR
+                     (ma.offer_expires_at IS NOT NULL AND ma.offer_expires_at<=NOW())
+                   )
+                 )
+               ) AS review_eligible_now
         FROM demand_proposals p
         JOIN demand_accounts a ON a.id=p.account_id
         JOIN demand_opportunities o ON o.id=p.opportunity_id
