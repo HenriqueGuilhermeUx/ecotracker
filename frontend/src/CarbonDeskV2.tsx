@@ -16,7 +16,7 @@ type Rfq = {
 
 type SupplyCandidate = {
   id:number; publicCode:string; candidateType:string; candidateKey:string;
-  supplyLeadId?:number|null; supplyInventoryId?:number|null; registry?:string|null;
+  supplyLeadId?:number|null; supplyInventoryId?:number|null; monitoredAssetId?:number|null; registry?:string|null;
   registryProjectId?:string|null; projectName?:string|null; country?:string|null; vintage?:string|null;
   candidateTonnes:string|number; confidence:string; sourcingScore:number; status:string;
   autoCloseEligible:boolean; rationale?:Json; snapshot?:Json; lastCheckedAt?:string;
@@ -27,6 +27,7 @@ type Proposal = {
   target_tonnes:string|number; coverage_pct:string|number; final_total_brl:string|number;
   checkout_mode:string; review_status?:string|null; outbox_id?:number|null;
   outbox_status?:string|null; contact_email?:string|null; expires_at?:string|null;
+  review_eligible_now?:boolean|null; opportunity_status?:string|null;
 };
 
 type Basket = {
@@ -108,6 +109,10 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
   }
 
   async function prepareSupplierRfq(rfq:Json,candidate:SupplyCandidate) {
+    if(candidate.candidateType==="market_signal" || !candidate.supplyLeadId) {
+      setMessage("Sinal de mercado não é fornecedor confirmado. Verifique provider/evidência, origine o holder e passe pela elegibilidade antes de preparar RFQ de fornecedor.");
+      return;
+    }
     const requested=Math.min(n(rfq.gap_tonnes),n(candidate.candidateTonnes));
     await act(`prepare-supply-${candidate.id}`,async()=>{
       const selection=await api<Json>(`/admin/market-maker/rfqs/${rfq.id}/candidates/${candidate.id}/select`,{
@@ -118,8 +123,9 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
   }
 
   const openRfqs=useMemo(()=>rfqs.filter((r)=>["open","partially_sourced"].includes(r.status)),[rfqs]);
-  const reviewQueue=useMemo(()=>proposals.filter((p)=>p.status==="draft"&&!p.review_status),[proposals]);
-  const approvedQueue=useMemo(()=>proposals.filter((p)=>p.status==="draft"&&p.review_status==="approved"&&!p.outbox_id),[proposals]);
+  const reviewQueue=useMemo(()=>proposals.filter((p)=>p.status==="draft"&&!p.review_status&&p.review_eligible_now!==false),[proposals]);
+  const approvedQueue=useMemo(()=>proposals.filter((p)=>p.status==="draft"&&p.review_status==="approved"&&!p.outbox_id&&p.review_eligible_now!==false),[proposals]);
+  const staleReviewQueue=useMemo(()=>proposals.filter((p)=>p.status==="draft"&&p.review_eligible_now===false),[proposals]);
   const buyerReady=useMemo(()=>buyerOutbox.filter((o)=>o.status==="ready"),[buyerOutbox]);
   const supplyReady=useMemo(()=>supplyOutbox.filter((o)=>o.status==="ready"),[supplyOutbox]);
   const proposalValue=useMemo(()=>reviewQueue.reduce((sum,p)=>sum+n(p.final_total_brl),0),[reviewQueue]);
@@ -157,14 +163,15 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
             <div className="row-main"><div><b>{rfq.company_name}</b><small>{rfq.claim_purpose} · prioridade {rfq.priority_score}</small></div><Status value={rfq.status}/></div>
             <div className="coverage"><i style={{width:`${Math.min(100,n(rfq.covered_tonnes)/Math.max(1,n(rfq.target_tonnes))*100)}%`}}/></div>
             <div className="row-metrics"><span><small>Target</small><b>{tons(rfq.target_tonnes)} t</b></span><span><small>Coberto</small><b>{tons(rfq.covered_tonnes)} t</b></span><span className="gap"><small>Gap</small><b>{tons(rfq.gap_tonnes)} t</b></span><span><small>Candidatos</small><b>{n(rfq.candidate_count)}</b></span></div>
-            <footer><small>{tons(rfq.candidate_tonnes)} t candidatos · {dateTime(rfq.updated_at)}</small><div className="row-actions"><button disabled={!!busy} onClick={()=>void act(`rfq-${rfq.id}`,()=>api(`/admin/market-maker/rfqs/${rfq.id}/refresh`,{method:"POST"}),"Supply atualizado.",()=>inspectRfq(rfq.id))}>Atualizar</button><button disabled={!!busy} onClick={()=>void inspectRfq(rfq.id)}>{busy===`inspect-${rfq.id}`?"Abrindo...":"Abrir candidatos"}</button></div></footer>
+            <footer><small>{tons(rfq.candidate_tonnes)} t candidatos deste RFQ · {dateTime(rfq.updated_at)}</small><div className="row-actions"><button disabled={!!busy} onClick={()=>void act(`rfq-${rfq.id}`,()=>api(`/admin/market-maker/rfqs/${rfq.id}/refresh`,{method:"POST"}),"Supply atualizado.",()=>inspectRfq(rfq.id))}>Atualizar</button><button disabled={!!busy} onClick={()=>void inspectRfq(rfq.id)}>{busy===`inspect-${rfq.id}`?"Abrindo...":"Abrir candidatos"}</button></div></footer>
           </article>)}{!openRfqs.length&&<Empty text="Nenhum gap aberto."/>}</div>
         </DeskCard>
 
         <DeskCard title="Fila comercial comprador" eyebrow="PROPOSTAS" count={reviewQueue.length+approvedQueue.length}>
+          {staleReviewQueue.length>0&&<div className="claim-warning"><b>{staleReviewQueue.length} proposta(s) obsoleta(s) ocultada(s).</b> Supply atual não sustenta mais o snapshot; rematching obrigatório.</div>}
           <div className="desk-list">{reviewQueue.map((p)=><BuyerProposal key={p.id} proposal={p} label="Aprovar snapshot" disabled={!!busy} action={()=>act(`approve-${p.id}`,()=>api(`/admin/demand/proposals/${p.id}/review/approve`,{method:"POST",body:JSON.stringify({note:"Aprovada pela Carbon Desk"})}),"Proposta aprovada.")} />)}
           {approvedQueue.map((p)=><BuyerProposal key={p.id} proposal={p} label="Criar outbox" disabled={!!busy||!p.contact_email} action={()=>act(`outbox-${p.id}`,()=>api(`/admin/demand/proposals/${p.id}/outbox`,{method:"POST",body:"{}"}),"Outbox comprador criado.")} />)}
-          {!reviewQueue.length&&!approvedQueue.length&&<Empty text="Nenhuma proposta aguardando ação."/>}</div>
+          {!reviewQueue.length&&!approvedQueue.length&&<Empty text="Nenhuma proposta atual aguardando ação."/>}</div>
         </DeskCard>
       </div>
 
@@ -184,7 +191,7 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
 
       <div className="desk-grid two">
         <DeskCard title="Outbox comprador" eyebrow="BUYER OUTREACH" count={buyerOutbox.length}><div className="desk-list">{buyerOutbox.slice(0,12).map((item)=><article className="desk-row outbox-row" key={item.id}><div className="row-main"><div><b>{item.company_name||item.recipient_name||item.recipient_email}</b><small>{item.recipient_email}</small></div><Status value={item.status}/></div><p>{item.subject}</p><footer><small>tentativas {n(item.attempts)}</small>{item.status==="ready"&&<button disabled={!buyerOutreach.live||!!busy} onClick={()=>void act(`send-buyer-${item.id}`,()=>api(`/admin/demand/outbox/${item.id}/dispatch`,{method:"POST",body:JSON.stringify({actor:"Carbon Desk"})}),"Proposta enviada ao comprador.")}>{buyerOutreach.live?"Enviar proposta":"Envio bloqueado"}</button>}</footer></article>)}{!buyerOutbox.length&&<Empty text="Nenhuma proposta no outbox."/>}</div></DeskCard>
-        <DeskCard title="Supply candidato agregado" eyebrow="SUPPLY DESK" count={Array.isArray(summary?.supplyCandidates)?summary.supplyCandidates.length:0}><div className="supply-summary">{(summary?.supplyCandidates||[]).map((item:Json)=><div key={item.candidate_type}><span>{candidateType(item.candidate_type)}</span><strong>{tons(item.tonnes)} t</strong><small>{n(item.count)} candidatos</small></div>)}</div><p className="desk-footnote">Mandato, seller-confirmed e saldo registral são níveis de sourcing. Apenas monitored assets claim-ready entram em compensação.</p></DeskCard>
+        <DeskCard title="Supply único observado" eyebrow="SUPPLY DESK" count={Array.isArray(summary?.supplyCandidates)?summary.supplyCandidates.length:0}><div className="supply-summary">{(summary?.supplyCandidates||[]).map((item:Json)=><div key={item.candidate_type}><span>{candidateType(item.candidate_type)}</span><strong>{tons(item.tonnes)} t</strong><small>{n(item.count)} fontes econômicas únicas</small></div>)}</div><p className="desk-footnote">Deduplicado entre RFQs por inventário/lead/monitored asset. Sinal de mercado não é seller-confirmed nem claim-ready.</p></DeskCard>
       </div>
 
       <DeskCard title="Operações corporativas" eyebrow="BASKETS / SETTLEMENT" count={activeBaskets.length}><div className="basket-table-wrap"><table className="desk-table"><thead><tr><th>Empresa</th><th>Volume</th><th>Valor</th><th>Legs</th><th>Reserva</th><th>Pagamento</th><th>Status</th></tr></thead><tbody>{baskets.slice(0,30).map((b)=><tr key={b.id}><td><b>{b.company_name}</b><small>{b.public_code.slice(0,8)}</small></td><td>{tons(n(b.covered_kg)/1000)} t</td><td>{money(b.final_total_brl)}</td><td>{n(b.confirmed_legs)}/{n(b.leg_count)}</td><td>{n(b.active_reservations)>0?`${b.active_reservations} ativa(s)`:"—"}</td><td><Status value={b.payment_status||"not_started"}/></td><td><Status value={b.status}/></td></tr>)}</tbody></table>{!baskets.length&&<Empty text="Nenhum basket corporativo."/>}</div></DeskCard>
@@ -194,14 +201,19 @@ function CarbonDeskPanel({logout}:{logout:()=>void}) {
   </main></MarketShell>;
 }
 
+function marketSignalConfidence(value:string) {
+  return ({marketplace_observed:"Disponibilidade observada no marketplace",marketplace_indicative:"Disponibilidade indicativa",provider_connected_signal:"Provider conectado · disponibilidade a provar"} as Record<string,string>)[value]||label(value);
+}
+
 function RfqCandidatePanel({rfq,selections,busy,close,prepare}:{rfq:Json;selections:Json[];busy:string;close:()=>void;prepare:(candidate:SupplyCandidate)=>void}) {
   const candidates:Array<SupplyCandidate>=Array.isArray(rfq.candidates)?rfq.candidates:[];
   return <section className="desk-card supply-candidate-panel"><header><div><span>SUPPLY MATCHING</span><h2>{rfq.company_name} · gap {tons(rfq.gap_tonnes)} t</h2></div><button className="desk-button ghost" onClick={close}>Fechar</button></header>
-    <div className="candidate-grid">{candidates.map((c)=>{ const selection=selections.find((s)=>Number(s.candidate_id)===Number(c.id)); const supplier=c.snapshot?.supplierName||c.snapshot?.supplier_name||`Lead #${c.supplyLeadId||"—"}`; return <article className="supply-candidate" key={c.id}>
+    <div className="candidate-grid">{candidates.map((c)=>{ const selection=selections.find((s)=>Number(s.candidate_id)===Number(c.id)); const marketSignal=c.candidateType==="market_signal"; const supplier=marketSignal?`Marketplace/provider observado · ${c.registry||"fonte"}`:(c.snapshot?.supplierName||c.snapshot?.supplier_name||`Lead #${c.supplyLeadId||"—"}`); const evidence=c.snapshot?.evidenceUrl||c.snapshot?.sourceUrl; return <article className="supply-candidate" key={c.id}>
       <div className="candidate-head"><div><small>{candidateType(c.candidateType)}</small><b>{c.projectName||c.registryProjectId||"Projeto"}</b><span>{supplier}</span></div><strong>{tons(c.candidateTonnes)} t</strong></div>
-      <div className="candidate-tags"><Status value={c.confidence}/><span>score {n(c.sourcingScore)}</span><span>{c.country||"país n/d"}</span><span>vintage {c.vintage||"n/d"}</span></div>
-      <div className="claim-warning">AUTO-CLOSE: <b>FALSE</b> · {c.rationale?.claimReady===false?"não claim-ready":"gate claim-ready obrigatório"}</div>
-      <footer><small>{c.registry||"registry n/d"} · {c.registryProjectId||"project id n/d"}</small>{selection?<Status value={selection.response_id?"supplier_responded":selection.outbox_status||"selected"}/>:<button disabled={!!busy||!c.supplyLeadId} onClick={()=>prepare(c)}>{busy===`prepare-supply-${c.id}`?"Preparando...":"Preparar RFQ fornecedor"}</button>}</footer>
+      <div className="candidate-tags">{marketSignal?<span className="desk-status warning">{marketSignalConfidence(c.confidence)}</span>:<Status value={c.confidence}/>}<span>score {n(c.sourcingScore)}</span><span>{c.country||"país n/d"}</span><span>vintage {c.vintage||"n/d"}</span></div>
+      <div className="claim-warning">AUTO-CLOSE: <b>FALSE</b> · {marketSignal?"sinal observado ≠ estoque confirmado ≠ claim-ready":c.rationale?.claimReady===false?"não claim-ready":"gate claim-ready obrigatório"}</div>
+      {marketSignal&&<div className="claim-warning"><b>PRÓXIMO GATE:</b> provar disponibilidade/preço no provider ou identificar holder → originação comercial → eligibility. Este card não representa oferta firme.</div>}
+      <footer><small>{c.registry||"registry n/d"} · {c.registryProjectId||"project id n/d"}{c.monitoredAssetId?` · asset #${c.monitoredAssetId}`:""}</small>{marketSignal?<div className="row-actions">{evidence&&<a className="mini-button" href={String(evidence)} target="_blank" rel="noreferrer">Abrir evidência ↗</a>}<span className="desk-status warning">Qualificação obrigatória</span></div>:selection?<Status value={selection.response_id?"supplier_responded":selection.outbox_status||"selected"}/>:<button disabled={!!busy||!c.supplyLeadId} onClick={()=>prepare(c)}>{busy===`prepare-supply-${c.id}`?"Preparando...":"Preparar RFQ fornecedor"}</button>}</footer>
     </article>; })}{!candidates.length&&<Empty text="Nenhum candidato de supply para este RFQ."/>}</div>
   </section>;
 }
@@ -229,4 +241,4 @@ function DeskCard({title,eyebrow,count,children}:{title:string;eyebrow:string;co
 function Gate({title,live,warn=false,text}:{title:string;live:boolean;warn?:boolean;text:string}) { return <div><span className={warn?"dot warn":live?"dot live":"dot"}/><b>{title}</b><small>{text}</small></div>; }
 function Status({value}:{value:string}) { const v=String(value||"unknown").toLowerCase(); const positive=["resolved","proposal_ready","approved","sent","paid","completed","fulfilled","delivered","qualified","seller_confirmed"].some((x)=>v.includes(x)); const warning=["review","required","open","partial","awaiting","pending","failed","contacting"].some((x)=>v.includes(x)); return <span className={`desk-status ${positive?"positive":warning?"warning":""}`}>{label(value)}</span>; }
 function Empty({text}:{text:string}) { return <div className="desk-empty">{text}</div>; }
-function candidateType(value:string) { return ({mandated_inventory:"Mandato ativo",seller_confirmed:"Seller-confirmed",registry_estimate:"Saldo registral estimado"} as Record<string,string>)[value]||label(value); }
+function candidateType(value:string) { return ({mandated_inventory:"Mandato ativo",seller_confirmed:"Seller-confirmed",registry_estimate:"Saldo registral estimado",market_signal:"Sinal de mercado"} as Record<string,string>)[value]||label(value); }
