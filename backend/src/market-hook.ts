@@ -72,6 +72,27 @@ if (!proto.__marketInstalled) {
   const original = proto.listen;
   proto.listen = function (this: unknown, ...args: unknown[]) {
     const app = this as Parameters<typeof registerMarketRoutes>[0];
+
+    // Incident-response kill switch. Woovi remains fail-closed even if a stale
+    // AppID is still present in the deployment environment. Re-enable only after
+    // the old AppID has been revoked, a new backend API key has been issued and
+    // WOOVI_ENABLED=true has been set explicitly in the server environment.
+    app.use((req, res, next) => {
+      const wooviEnabled = process.env.WOOVI_ENABLED === "true";
+      const method = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? String((req.body as Record<string, unknown>).method || "").toLowerCase()
+        : "";
+      const pixCheckout = req.method === "POST" && req.path.endsWith("/checkout") && method === "pix";
+      const wooviWebhook = req.path.startsWith("/api/webhooks/woovi");
+      if (!wooviEnabled && (pixCheckout || wooviWebhook)) {
+        return res.status(503).json({
+          error: "Pix Woovi temporariamente bloqueado por rotação de credencial.",
+          code: "WOOVI_CREDENTIAL_ROTATION_REQUIRED",
+        });
+      }
+      return next();
+    });
+
     app.get("/api/market/quotes/:publicCode", async (req, res) => {
       try {
         const raw = req.params.publicCode;
