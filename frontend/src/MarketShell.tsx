@@ -11,8 +11,9 @@ export function MarketShell({ children }: { children: ReactNode }) {
         <nav>
           <a href="#home">Início</a>
           <a className="marketplace-nav" href="#marketplace">Comprar créditos</a>
-          <a href="#planos">Planos</a>
+          <a href="#plans">Planos</a>
           <a href="#rewards">EcoRewards</a>
+          <a className="marketplace-nav" href="#request">Solicitar oferta</a>
           {isAdmin && (
             <details className="admin-nav">
               <summary>Admin</summary>
