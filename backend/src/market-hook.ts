@@ -16,6 +16,7 @@ import { registerDemandAutopilotRoutes } from "./demand-autopilot-routes.js";
 import { startDemandAutopilotWorker } from "./demand-autopilot.js";
 import { initDemandSupplyRfqDb } from "./demand-supply-rfq-db.js";
 import { registerDemandSupplyRfqRoutes } from "./demand-supply-rfq-routes.js";
+import { registerPublicCorporateDemandRoutes } from "./public-corporate-demand-routes.js";
 import { initSupplyOutreachDb } from "./supply-outreach-db.js";
 import { registerSupplyOutreachRoutes } from "./supply-outreach-routes.js";
 import { initSupplyIntakeDb } from "./supply-intake-db.js";
@@ -73,10 +74,6 @@ if (!proto.__marketInstalled) {
   proto.listen = function (this: unknown, ...args: unknown[]) {
     const app = this as Parameters<typeof registerMarketRoutes>[0];
 
-    // Incident-response kill switch. Woovi remains fail-closed even if a stale
-    // AppID is still present in the deployment environment. Re-enable only after
-    // the old AppID has been revoked, a new backend API key has been issued and
-    // WOOVI_ENABLED=true has been set explicitly in the server environment.
     app.use((req, res, next) => {
       const wooviEnabled = process.env.WOOVI_ENABLED === "true";
       const method = req.body && typeof req.body === "object" && !Array.isArray(req.body)
@@ -123,6 +120,7 @@ if (!proto.__marketInstalled) {
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
     registerAcrSupplyScoutRoutes(app);
+    registerPublicCorporateDemandRoutes(app);
     registerDemandDeskRoutes(app);
     registerDemandProposalRoutes(app);
     registerDemandAutopilotRoutes(app);

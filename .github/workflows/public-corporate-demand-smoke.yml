@@ -1,0 +1,20 @@
+name: EcoTracker Public Corporate Demand Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  public-corporate-demand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Verify public demand intake safety and wiring
+        run: node backend/scripts/public-corporate-demand-smoke.mjs
