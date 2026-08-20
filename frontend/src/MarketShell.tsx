@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./admin-nav.css";
 
 export function MarketShell({ children }: { children: ReactNode }) {
   const isAdmin = Boolean(localStorage.getItem("ecotracker_admin_token"));
@@ -12,13 +13,18 @@ export function MarketShell({ children }: { children: ReactNode }) {
           <a className="marketplace-nav" href="#marketplace">Comprar créditos</a>
           <a href="#planos">Planos</a>
           <a href="#rewards">EcoRewards</a>
-          {isAdmin && <>
-            <a className="marketplace-nav" href="#sell">Vender</a>
-            <a className="ghost" href="#deal-desk">Deal Desk</a>
-            <a className="ghost" href="#carbon-desk">Carbon Desk</a>
-            <a className="ghost" href="#carbonmark-rail">Carbonmark Rail</a>
-            <a className="ghost" href="#market-admin">Operação</a>
-          </>}
+          {isAdmin && (
+            <details className="admin-nav">
+              <summary>Admin</summary>
+              <div className="admin-nav-menu">
+                <a href="#sell">Vender</a>
+                <a href="#deal-desk">Deal Desk</a>
+                <a href="#carbon-desk">Carbon Desk</a>
+                <a href="#carbonmark-rail">Carbonmark Rail</a>
+                <a href="#market-admin">Operação</a>
+              </div>
+            </details>
+          )}
         </nav>
       </header>
       {children}
