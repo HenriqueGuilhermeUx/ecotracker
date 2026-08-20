@@ -13,6 +13,7 @@ import { SellDesk } from "./SellDesk";
 import "./market.css";
 import "./market-live.css";
 import "./commerce.css";
+import "./corporate-state.css";
 
 function CarbonmarkRailPage() {
   const token = localStorage.getItem("ecotracker_admin_token");
