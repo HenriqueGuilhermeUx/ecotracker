@@ -14,8 +14,8 @@ export function CorporateHome() {
               O EcoTracker organiza projeto, registry, vintage, volume, preço, aposentadoria e evidências em uma única operação.
             </p>
             <div className="corp-actions">
-              <a className="corp-primary" href="#marketplace">Ver créditos disponíveis</a>
-              <a className="corp-secondary" href="#marketplace">Solicitar cotação empresarial</a>
+              <a className="corp-primary" href="#request">Solicitar oferta empresarial</a>
+              <a className="corp-secondary" href="#marketplace">Ver créditos disponíveis</a>
             </div>
             <div className="corp-trust-row">
               <span>Projeto + registry</span>
@@ -43,14 +43,14 @@ export function CorporateHome() {
           </div>
           <div className="corp-grid-three">
             <article>
-              <small>01 · SELEÇÃO</small>
-              <h3>Projetos com informações de origem</h3>
-              <p>Apresentamos o nome oficial do projeto, registry, localização, metodologia, vintage e evidências disponíveis.</p>
+              <small>01 · DEMANDA</small>
+              <h3>Informe quanto sua empresa precisa</h3>
+              <p>Volume e finalidade são suficientes para iniciar. Registry, país e tipo de projeto podem ser informados como preferência.</p>
             </article>
             <article>
               <small>02 · OFERTA</small>
               <h3>Preço e volume em linguagem comercial</h3>
-              <p>Você recebe quantidade em tCO₂e, preço por tonelada, valor total, composição da oferta e prazo de validade.</p>
+              <p>O EcoTracker busca, combina e valida supply. Você recebe quantidade em tCO₂e, preço por tonelada, valor total e composição da oferta.</p>
             </article>
             <article>
               <small>03 · APOSENTADORIA</small>
@@ -65,11 +65,10 @@ export function CorporateHome() {
             <span>PARA EMPRESAS E GRANDES VOLUMES</span>
             <h2>Precisa comprar 100, 1.000 ou 10.000+ tCO₂e?</h2>
             <p>
-              O EcoTracker pode estruturar uma oferta com um ou mais projetos, respeitando volume disponível,
-              elegibilidade, validade comercial e a finalidade climática informada pela empresa.
+              Não dependa do que estiver visível no catálogo naquele instante. Informe sua demanda e o EcoTracker pode estruturar uma oferta com um ou mais projetos, respeitando volume, elegibilidade, validade comercial e finalidade climática.
             </p>
           </div>
-          <a className="corp-primary" href="#marketplace">Começar uma cotação</a>
+          <a className="corp-primary" href="#request">Quero receber uma oferta</a>
         </section>
 
         <section className="corp-section corp-ecot-layer">
