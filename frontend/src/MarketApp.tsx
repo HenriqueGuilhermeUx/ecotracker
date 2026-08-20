@@ -4,6 +4,7 @@ import { CarbonDesk } from "./CarbonDeskV2";
 import { CarbonmarkRailPanel } from "./CarbonmarkRailPanel";
 import { CarbonmarkRfqQualificationPanel } from "./CarbonmarkRfqQualificationPanel";
 import { ClientAgreementPage } from "./ClientAgreementPage";
+import { CorporateDemandIntake } from "./CorporateDemandIntake";
 import { CorporateHome } from "./CorporateHome";
 import { CorporateMarketplace } from "./CorporateMarketplace";
 import { LargeOrderDealDesk } from "./LargeOrderDealDesk";
@@ -35,6 +36,7 @@ export default function MarketApp() {
   if (page.startsWith("agreement/")) return <ClientAgreementPage publicCode={page.slice("agreement/".length)} />;
   if (page === "home") return <CorporateHome />;
   if (page === "marketplace") return <CorporateMarketplace />;
+  if (page === "request") return <CorporateDemandIntake />;
   if (page === "market-admin") return <MarketAdmin />;
   if (page === "carbon-desk") return <CarbonDesk />;
   if (page === "carbonmark-rail") return <CarbonmarkRailPage />;
