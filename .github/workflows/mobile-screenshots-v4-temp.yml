@@ -1,0 +1,97 @@
+name: EcoTracker V4 Play Screenshots
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-screenshots-v4-temp.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  capture-phone-screenshots:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download validated v4 standalone APK artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9024835285/zip" \
+            -o "$RUNNER_TEMP/ecotracker-v4-apk.zip"
+          mkdir -p "$RUNNER_TEMP/ecotracker-v4-apk"
+          unzip -q "$RUNNER_TEMP/ecotracker-v4-apk.zip" -d "$RUNNER_TEMP/ecotracker-v4-apk"
+          APK="$(find "$RUNNER_TEMP/ecotracker-v4-apk" -name '*.apk' -type f | head -1)"
+          test -n "$APK"
+          echo "ECOT_SCREENSHOT_APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Capture actual app screens on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
+          script: |
+            mkdir -p play-screenshots
+            adb install -r "$ECOT_SCREENSHOT_APK"
+            adb shell am force-stop com.alternativeventures.ecotracker || true
+            adb shell am start -n com.alternativeventures.ecotracker/.MainActivity
+            sleep 20
+            echo 'Pixel 2 emulator: 1080x1920' > play-screenshots/device-size.txt
+            adb shell wm size >> play-screenshots/device-size.txt 2>&1 || true
+            sleep 5 && adb shell screencap -p /sdcard/01-inicio.png && adb pull /sdcard/01-inicio.png play-screenshots/01-inicio.png >/dev/null
+            adb shell input tap 324 1810
+            sleep 5 && adb shell screencap -p /sdcard/02-mercado.png && adb pull /sdcard/02-mercado.png play-screenshots/02-mercado.png >/dev/null
+            adb shell input tap 540 1810
+            sleep 5 && adb shell screencap -p /sdcard/03-calcular.png && adb pull /sdcard/03-calcular.png play-screenshots/03-calcular.png >/dev/null
+            adb shell input tap 756 1810
+            sleep 5 && adb shell screencap -p /sdcard/04-atividade.png && adb pull /sdcard/04-atividade.png play-screenshots/04-atividade.png >/dev/null
+            adb shell input tap 972 1810
+            sleep 5 && adb shell screencap -p /sdcard/05-conta.png && adb pull /sdcard/05-conta.png play-screenshots/05-conta.png >/dev/null
+            adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/window.xml play-screenshots/window.xml >/dev/null 2>&1 || true
+            adb shell dumpsys window windows > play-screenshots/window-dumpsys.txt 2>&1 || true
+
+      - name: Validate screenshot dimensions and create alt text
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct, hashlib
+          def png_size(path):
+              with open(path,'rb') as f: sig=f.read(24)
+              if sig[:8] != b'\x89PNG\r\n\x1a\n': raise SystemExit(f'Not PNG: {path}')
+              return struct.unpack('>II', sig[16:24])
+          images=sorted(Path('play-screenshots').glob('*.png'))
+          if len(images)!=5: raise SystemExit(f'Expected 5 screenshots, got {len(images)}')
+          hashes=[]
+          for p in images:
+              w,h=png_size(p); digest=hashlib.sha256(p.read_bytes()).hexdigest(); hashes.append(digest)
+              print(p.name,w,h,digest)
+              if min(w,h)<320 or max(w,h)>3840 or max(w,h)>2*min(w,h): raise SystemExit(f'Invalid Play dimensions: {p} {w}x{h}')
+          if len(set(hashes)) < 3:
+              raise SystemExit('Screenshots are not sufficiently distinct; refusing to publish duplicates.')
+          Path('play-screenshots/ALT-TEXT.txt').write_text('''01-inicio.png — Tela inicial do EcoTracker com resumo de impacto e acesso aos principais recursos.\n02-mercado.png — Mercado do EcoTracker com ativos ambientais monitorados e categorias de elegibilidade.\n03-calcular.png — Calculadora do EcoTracker para estimar a pegada de carbono e recomendar uma quantidade de ECOT.\n04-atividade.png — Tela de atividade do EcoTracker com histórico e acompanhamento das operações ambientais.\n05-conta.png — Área da conta do EcoTracker com perfil, privacidade, dados e links legais.\n''', encoding='utf-8')
+          PY
+
+      - name: Upload Play Store screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-v4-play-screenshots
+          path: play-screenshots/
+          if-no-files-found: error
+          retention-days: 30
