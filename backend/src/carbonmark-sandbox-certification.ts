@@ -27,7 +27,7 @@ export function carbonmarkSandboxCertificationGate(){
   return {
     configured,enabled,acknowledged,environment,safeEnvironment,productionGateDisarmed,technicalMaxKg,
     ready:configured&&enabled&&acknowledged&&safeEnvironment&&productionGateDisarmed,
-    apiVersion:"v18",provider,
+    apiVersion:"v19",provider,
     requiredAck:"ENABLE_SANDBOX_CARBONMARK_RETIREMENTS",
     invariant:"Sandbox certification refuses to run if environment is not sandbox or production order gate is live. Technical probes never change climate eligibility.",
   };
@@ -76,7 +76,7 @@ export async function runCarbonmarkSandboxCertification(input:{assetId:number;re
   const quote=await quoteProvider(assetPriceSourceId,requestedKg/1000);
   const order=await retirementProvider({quoteUuid:quote.uuid,beneficiaryName,retirementMessage});
   const snapshot={
-    version:"ecotracker-carbonmark-sandbox-certification-v2",apiVersion:"v18",environment:"sandbox",certificationMode,
+    version:"ecotracker-carbonmark-sandbox-certification-v2",apiVersion:"v19",environment:"sandbox",certificationMode,
     monitoredAssetId:Number(asset.id),registry:asset.registry,projectName:asset.project_name,sourceReference:asset.source_reference,
     assetPriceSourceId,requestedKg,quoteUuid:quote.uuid,costUsdc:quote.costUsdc,beneficiaryName,retirementMessage,
     orderStatus:order.status,reference:order.reference,retirementId:order.retirementId,txHash:order.txHash,
