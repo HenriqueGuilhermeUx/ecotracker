@@ -5,6 +5,7 @@ import { pool } from "./db.js";
 import { generateDemandMatches } from "./demand-matching.js";
 import { createDemandProposal } from "./demand-proposal.js";
 import { resolveDemandSupplyRfq, upsertDemandSupplyRfq } from "./demand-supply-rfq.js";
+import { notifyInboundCorporateLead } from "./inbound-lead-notification.js";
 
 const intakeSchema = z.object({
   companyName: z.string().trim().min(2).max(255),
@@ -162,6 +163,33 @@ export function registerPublicCorporateDemandRoutes(app: Application) {
         account.id,d.targetTonnes,d.claimPurpose,d.preferredCountry || null,d.preferredRegistry || null,
         d.preferredProjectType || null,priorityScore,JSON.stringify(constraints),d.notes || null,
       ])).rows[0];
+
+      void notifyInboundCorporateLead({
+        protocol,
+        companyName: d.companyName,
+        contactName: d.contactName,
+        email: d.email,
+        phone: d.phone,
+        targetTonnes: d.targetTonnes,
+        claimPurpose: d.claimPurpose,
+        preferredRegistry: d.preferredRegistry,
+        preferredCountry: d.preferredCountry,
+        preferredProjectType: d.preferredProjectType,
+        desiredBy: d.desiredBy,
+        opportunityId: Number(opportunity.id),
+      }).then((notification) => {
+        return pool.query(
+          `UPDATE demand_opportunities
+           SET constraints=constraints || $2::jsonb,updated_at=NOW()
+           WHERE id=$1`,
+          [opportunity.id, JSON.stringify({
+            leadNotification: notification.sent ? "sent" : "not_configured",
+            leadNotificationAt: new Date().toISOString(),
+          })],
+        );
+      }).catch((error) => {
+        console.warn("[public-demand] lead notification failed", error);
+      });
 
       let automation: { fullyCovered: boolean; coveredTonnes: number; uncoveredTonnes: number } | null = null;
       try {
