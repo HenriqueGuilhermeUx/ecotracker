@@ -107,7 +107,7 @@ services:
       - key: CARBONMARK_ENVIRONMENT
         value: sandbox
       - key: CARBONMARK_API_BASE
-        value: https://v18.api.carbonmark.com
+        value: https://v19.api.carbonmark.com
       - key: CARBONMARK_PUBLISHED_LISTING_LIMIT
         value: "100"
       - key: CARBONMARK_API_KEY
