@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#06100c"/>
+<rect x="56" y="56" width="1088" height="518" rx="32" fill="#091c13" stroke="#244432" stroke-width="2"/>
+<rect x="86" y="84" width="230" height="46" rx="23" fill="#13422a"/>
+<text x="110" y="115" fill="#69ff9a" font-size="30" font-family="Arial,sans-serif" font-weight="700">ECOTRACKER</text>
+<text x="86" y="225" fill="#edf8f1" font-size="64" font-family="Arial,sans-serif" font-weight="700">Créditos de carbono</text>
+<text x="86" y="300" fill="#edf8f1" font-size="64" font-family="Arial,sans-serif" font-weight="700">para empresas.</text>
+<text x="86" y="370" fill="#b8cbbf" font-size="30" font-family="Arial,sans-serif">Origem verificável • preço • aposentadoria • evidências</text>
+<rect x="86" y="425" width="405" height="72" rx="18" fill="#69ff9a"/>
+<text x="117" y="470" fill="#07140d" font-size="25" font-family="Arial,sans-serif" font-weight="700">Solicite uma oferta empresarial</text>
+<text x="86" y="540" fill="#8ea898" font-size="24" font-family="Arial,sans-serif">ecotracker10.netlify.app</text>
+</svg>
