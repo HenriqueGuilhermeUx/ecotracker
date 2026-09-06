@@ -95,7 +95,7 @@ export function CarbonmarkRailPanel(){
   }
 
   return <section className="desk-card carbonmark-rail-panel">
-    <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · v18</span><h2>Market signal → shadow quote → eligibility → execução controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · API {data.provider?.stableApiVersion||"v18"}</small></div></header>
+    <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · v19</span><h2>Market signal → shadow quote → eligibility → execução controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · API {data.provider?.stableApiVersion||"v19"}</small></div></header>
     <div className="rail-safety"><strong>GATES INDEPENDENTES</strong><span>Shadow quote prova somente um caminho cotável no provider. Não é seller-confirmed e não cria order. Claim-ready exige revisão humana explícita; execução comercial continua exigindo o gate de produção separado.</span></div>
     <div className="rail-status-grid">
       <span><small>API key</small><b>{execution.configured?"configurada":"ausente"}</b></span><span><small>Prod flag</small><b>{execution.enabled?"ON":"OFF"}</b></span><span><small>Prod ACK</small><b>{execution.acknowledged?"OK":"DISABLED"}</b></span><span><small>Produção</small><b>{execution.live?"LIVE":"BLOCKED"}</b></span>
