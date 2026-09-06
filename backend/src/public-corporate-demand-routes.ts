@@ -5,7 +5,7 @@ import { pool } from "./db.js";
 import { generateDemandMatches } from "./demand-matching.js";
 import { createDemandProposal } from "./demand-proposal.js";
 import { resolveDemandSupplyRfq, upsertDemandSupplyRfq } from "./demand-supply-rfq.js";
-import { notifyInboundCorporateLead } from "./inbound-lead-notification.js";
+import { notifyInboundCorporateLead, sendInboundCorporateReceipt } from "./inbound-lead-notification.js";
 
 const intakeSchema = z.object({
   companyName: z.string().trim().min(2).max(255),
@@ -164,7 +164,7 @@ export function registerPublicCorporateDemandRoutes(app: Application) {
         d.preferredProjectType || null,priorityScore,JSON.stringify(constraints),d.notes || null,
       ])).rows[0];
 
-      void notifyInboundCorporateLead({
+      const leadMessage = {
         protocol,
         companyName: d.companyName,
         contactName: d.contactName,
@@ -177,18 +177,26 @@ export function registerPublicCorporateDemandRoutes(app: Application) {
         preferredProjectType: d.preferredProjectType,
         desiredBy: d.desiredBy,
         opportunityId: Number(opportunity.id),
-      }).then((notification) => {
+      };
+
+      void Promise.allSettled([
+        notifyInboundCorporateLead(leadMessage),
+        sendInboundCorporateReceipt(leadMessage),
+      ]).then((results) => {
+        const admin = results[0].status === "fulfilled" ? results[0].value : { sent: false };
+        const customer = results[1].status === "fulfilled" ? results[1].value : { sent: false };
         return pool.query(
           `UPDATE demand_opportunities
            SET constraints=constraints || $2::jsonb,updated_at=NOW()
            WHERE id=$1`,
           [opportunity.id, JSON.stringify({
-            leadNotification: notification.sent ? "sent" : "not_configured",
-            leadNotificationAt: new Date().toISOString(),
+            leadNotification: admin.sent ? "sent" : "not_sent",
+            customerReceipt: customer.sent ? "sent" : "not_sent",
+            notificationUpdatedAt: new Date().toISOString(),
           })],
         );
       }).catch((error) => {
-        console.warn("[public-demand] lead notification failed", error);
+        console.warn("[public-demand] lead messaging failed", error);
       });
 
       let automation: { fullyCovered: boolean; coveredTonnes: number; uncoveredTonnes: number } | null = null;
