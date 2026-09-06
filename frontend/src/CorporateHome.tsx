@@ -35,6 +35,12 @@ export function CorporateHome() {
           </aside>
         </section>
 
+        <section className="launch-trust" aria-label="Confiança institucional EcoTracker">
+          <div><small>OPERAÇÃO BRASILEIRA</small><b>Alternative Ventures Ltda</b><span>CNPJ 61.920.356/0001-38 · Santos/SP</span></div>
+          <div><small>PROCESSO COMERCIAL</small><b>Oferta antes de cobrança</b><span>Preço, volume, validade e composição são apresentados antes de qualquer contratação.</span></div>
+          <div><small>CONCLUSÃO CLIMÁTICA</small><b>Aposentadoria + evidência</b><span>Claims de compensação dependem de retirement elegível e evidência registral.</span></div>
+        </section>
+
         <section className="corp-section">
           <div className="corp-section-head">
             <span>COMPRA DE CRÉDITOS DE CARBONO</span>
