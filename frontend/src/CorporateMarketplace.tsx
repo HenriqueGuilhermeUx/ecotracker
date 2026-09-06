@@ -138,6 +138,7 @@ export function CorporateMarketplace() {
             <div className="corp-empty">
               <b>{shelf === "verified" ? "Nenhum lote está liberado para compensação agora." : "Nenhum ativo de contribuição disponível agora."}</b>
               <p>O EcoTracker não apresenta um crédito como comprável antes de volume, elegibilidade e condições comerciais estarem validados.</p>
+              <a className="corp-primary" href="#request">Solicitar oferta sob demanda</a>
             </div>
           )}
         </section>
