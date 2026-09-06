@@ -13,6 +13,7 @@ export function MarketShell({ children }: { children: ReactNode }) {
           <a className="marketplace-nav" href="#marketplace">Comprar créditos</a>
           <a href="#planos">Planos</a>
           <a href="#rewards">EcoRewards</a>
+          <a href="#contact">Contato</a>
           <a className="marketplace-nav" href="#request">Solicitar oferta</a>
           {isAdmin && (
             <details className="admin-nav">
@@ -33,7 +34,13 @@ export function MarketShell({ children }: { children: ReactNode }) {
         <div>
           <div className="brand"><span>eco</span>tracker</div>
           <p>Créditos de carbono com origem, rastreabilidade e evidências.</p>
-          <a href="https://ecotracker10.netlify.app/">ecotracker10.netlify.app</a>
+          <small>Operado por Alternative Ventures Ltda · CNPJ 61.920.356/0001-38 · Santos/SP</small>
+          <div className="market-footer-links">
+            <a href="#contact">Contato</a>
+            <a href="#privacy">Privacidade</a>
+            <a href="#terms">Termos</a>
+            <a href="#request">Solicitar oferta</a>
+          </div>
         </div>
         <small>O EcoTracker apresenta projeto, registry, vintage, volume, condições comerciais e evidências disponíveis. Compensação de emissões só é concluída após aposentadoria elegível e rastreável.</small>
       </footer>
