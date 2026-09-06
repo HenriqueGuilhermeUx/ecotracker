@@ -73,3 +73,35 @@ export async function notifyInboundCorporateLead(input: LeadNotification) {
   if (!response.ok) throw new Error("Resend " + response.status + ": " + String(data.message || "falha no alerta de lead"));
   return { sent: true, providerReference: String(data.id || "") || null };
 }
+
+export async function sendInboundCorporateReceipt(input: LeadNotification) {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const from = String(process.env.EMAIL_FROM || "").trim();
+  if (!apiKey || !from || !input.email) return { sent: false, reason: "receipt_not_configured" };
+
+  const appUrl = String(process.env.PUBLIC_APP_URL || "https://ecotracker10.netlify.app").replace(/\/$/, "");
+  const purpose = input.claimPurpose === "voluntary_offset" ? "Compensação voluntária" : "Contribuição climática";
+  const subject = "EcoTracker — recebemos sua solicitação " + input.protocol;
+  const text = input.contactName + ",\n\nRecebemos a solicitação da " + input.companyName + " para " +
+    tonnes(input.targetTonnes) + " tCO₂e (" + purpose + ").\n\nProtocolo: " + input.protocol +
+    "\n\nAgora o EcoTracker inicia a composição e validação da oferta. Nenhum pagamento, compra ou aposentadoria de créditos ocorre nesta etapa. Antes de qualquer contratação, você receberá as condições comerciais e a composição dos créditos para análise.\n\nEcoTracker\n" + appUrl;
+  const html = "<p>" + esc(input.contactName) + ",</p>" +
+    "<p>Recebemos a solicitação da <strong>" + esc(input.companyName) + "</strong> para <strong>" +
+    esc(tonnes(input.targetTonnes)) + " tCO₂e</strong> (" + esc(purpose) + ").</p>" +
+    "<p>Protocolo: <strong>" + esc(input.protocol) + "</strong></p>" +
+    "<p>Agora o EcoTracker inicia a composição e validação da oferta. Nenhum pagamento, compra ou aposentadoria de créditos ocorre nesta etapa. Antes de qualquer contratação, você receberá as condições comerciais e a composição dos créditos para análise.</p>" +
+    "<p><a href=\"" + esc(appUrl) + "/#marketplace\">Conhecer o EcoTracker</a></p>";
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + apiKey,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "ecotracker-inbound-receipt/" + input.protocol,
+    },
+    body: JSON.stringify({ from, to: [input.email], subject, text, html }),
+  });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) throw new Error("Resend " + response.status + ": " + String(data.message || "falha no recibo do lead"));
+  return { sent: true, providerReference: String(data.id || "") || null };
+}
