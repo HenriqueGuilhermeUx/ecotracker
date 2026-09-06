@@ -58,7 +58,7 @@ export function registerCarbonmarkRoutes(app: Application) {
         execution: carbonmarkOrderExecutionStatus(),
         pricingPolicy: publicPricingPolicy(),
         apiContract: {
-          stableVersion: "v18",
+          stableVersion: "v19",
           sellerListingOrders: true,
           shadowQuotes: true,
           automatedSellerListingCreation: false,
@@ -135,7 +135,7 @@ export function registerCarbonmarkRoutes(app: Application) {
         pricingMode: "carbonmark_locked_quote",
         sourceProvider: "carbonmark",
         carbonmarkEnvironment: carbonmarkStatus().environment,
-        carbonmarkStableApiVersion: "v18",
+        carbonmarkStableApiVersion: "v19",
         carbonmarkQuoteUuid: sourceQuote.uuid,
         assetPriceSourceId: sourceQuote.assetPriceSourceId,
         quantityTonnes: sourceQuote.quantityTonnes,

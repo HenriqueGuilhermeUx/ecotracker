@@ -43,7 +43,7 @@ export function carbonmarkOrderExecutionStatus() {
     acknowledged,
     live: configured && enabled && acknowledged,
     environment,
-    stableApiVersion: "v18",
+    stableApiVersion: "v19",
     quoteMode: configured ? "shadow_quote_available" : "provider_not_configured",
     orderMode: configured && enabled && acknowledged ? "live_order_enabled" : "blocked",
     requiredAck: "ENABLE_LIVE_CARBONMARK_RETIREMENTS",

@@ -25,7 +25,7 @@ async function run(){
     let status=carbonmarkOrderExecutionStatus();
     assert.equal(status.configured,false);
     assert.equal(status.live,false);
-    assert.equal(status.stableApiVersion,"v18");
+    assert.equal(status.stableApiVersion,"v19");
 
     process.env.CARBONMARK_API_KEY="cm_api_fake_smoke_never_sent";
     status=carbonmarkOrderExecutionStatus();
@@ -57,13 +57,13 @@ async function run(){
     assert.equal(flagStillOff.metadata?.gate?.acknowledged,true);
 
     const render=await readFile("../render.yaml","utf8");
-    assert.match(render,/CARBONMARK_API_BASE[\s\S]*https:\/\/v18\.api\.carbonmark\.com/);
+    assert.match(render,/CARBONMARK_API_BASE[\s\S]*https:\/\/v19\.api\.carbonmark\.com/);
     assert.match(render,/CARBONMARK_ORDER_EXECUTION_ENABLED[\s\S]*value: "false"/);
     assert.match(render,/CARBONMARK_ORDER_EXECUTION_ACK[\s\S]*value: DISABLED/);
-    assert.equal(render.includes("https://v19.api.carbonmark.com"),false,"Render must not point Carbonmark at non-stable v19");
+    assert.equal(render.includes("https://v18.api.carbonmark.com"),false,"Render must not point Carbonmark at retired v18");
 
     console.log("Carbonmark execution gate smoke OK",{
-      stableApiVersion:"v18",
+      stableApiVersion:"v19",
       shadowQuoteAllowedWithKey:true,
       orderBlockedWithFlagOff:true,
       orderBlockedWithoutAck:true,

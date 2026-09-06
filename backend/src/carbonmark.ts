@@ -26,7 +26,7 @@ let refreshInFlight: Promise<{ published: number; connected: boolean; baseUrl: s
 
 const environment = () => String(process.env.CARBONMARK_ENVIRONMENT || "sandbox").toLowerCase();
 const configuredBase = () => process.env.CARBONMARK_API_BASE?.replace(/\/$/, "");
-const stableBase = () => configuredBase() || "https://v18.api.carbonmark.com";
+const stableBase = () => configuredBase() || "https://v19.api.carbonmark.com";
 const baseCandidates = () => [stableBase()];
 
 const apiKey = () => process.env.CARBONMARK_API_KEY?.trim() || "";
@@ -434,7 +434,7 @@ export function carbonmarkStatus() {
   return {
     configured: Boolean(apiKey()),
     environment: environment(),
-    stableApiVersion: "v18",
+    stableApiVersion: "v19",
     baseCandidates: baseCandidates(),
     lastRefreshAt: lastRefreshAt ? new Date(lastRefreshAt).toISOString() : null,
   };
