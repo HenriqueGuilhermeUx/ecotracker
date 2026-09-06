@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "./admin-nav.css";
+import "./launch-public.css";
 
 export function MarketShell({ children }: { children: ReactNode }) {
   const isAdmin = Boolean(localStorage.getItem("ecotracker_admin_token"));
