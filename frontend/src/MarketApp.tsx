@@ -8,6 +8,7 @@ import { CorporateDemandIntake } from "./CorporateDemandIntake";
 import { CorporateHome } from "./CorporateHome";
 import { CorporateMarketplace } from "./CorporateMarketplace";
 import { LargeOrderDealDesk } from "./LargeOrderDealDesk";
+import { ContactPage, PrivacyPage, TermsPage } from "./LegalPages";
 import { MarketAdmin } from "./MarketAdmin";
 import { MarketShell } from "./MarketShell";
 import { SellDesk } from "./SellDesk";
@@ -37,6 +38,9 @@ export default function MarketApp() {
   if (page === "home") return <CorporateHome />;
   if (page === "marketplace") return <CorporateMarketplace />;
   if (page === "request") return <CorporateDemandIntake />;
+  if (page === "privacy") return <PrivacyPage />;
+  if (page === "terms") return <TermsPage />;
+  if (page === "contact") return <ContactPage />;
   if (page === "market-admin") return <MarketAdmin />;
   if (page === "carbon-desk") return <CarbonDesk />;
   if (page === "carbonmark-rail") return <CarbonmarkRailPage />;
