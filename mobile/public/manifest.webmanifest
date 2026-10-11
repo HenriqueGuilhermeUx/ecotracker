@@ -1,0 +1,77 @@
+{
+  "id": "/app",
+  "name": "EcoTracker",
+  "short_name": "EcoTracker",
+  "description": "Calcule, adquira e acompanhe créditos ambientais fracionados com rastreabilidade até a aposentadoria.",
+  "start_url": "/app",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#06100C",
+  "theme_color": "#06100C",
+  "lang": "pt-BR",
+  "categories": [
+    "business",
+    "finance",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/app/ecotracker-app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mercado",
+      "short_name": "Mercado",
+      "url": "/app/market",
+      "icons": [
+        {
+          "src": "/app/ecotracker-app-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Calcular",
+      "short_name": "Calcular",
+      "url": "/app/impact",
+      "icons": [
+        {
+          "src": "/app/ecotracker-app-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Atividade",
+      "short_name": "Atividade",
+      "url": "/app/activity",
+      "icons": [
+        {
+          "src": "/app/ecotracker-app-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Conta",
+      "short_name": "Conta",
+      "url": "/app/profile",
+      "icons": [
+        {
+          "src": "/app/ecotracker-app-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
+}
