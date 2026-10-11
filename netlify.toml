@@ -1,7 +1,7 @@
 [build]
-  base = "frontend"
-  command = "npm install && npm run build"
-  publish = "dist"
+  base = "."
+  command = "npm install --workspace frontend --silent --no-audit --no-fund && npm run build --workspace frontend && npm install --prefix mobile --silent --no-audit --no-fund && npm run typecheck --prefix mobile && EXPO_PUBLIC_API_URL=/api npm run build:web --prefix mobile && node scripts/merge-mobile-pwa.mjs"
+  publish = "frontend/dist"
 
 # A API fica disponível no mesmo domínio do frontend.
 # Isso elimina divergência de VITE_API_URL e problemas de CORS.
@@ -10,6 +10,11 @@
   to = "https://ecotracker-api-cik7.onrender.com/api/:splat"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/app/*"
+  to = "/app/index.html"
+  status = 200
 
 [[redirects]]
   from = "/*"
@@ -39,3 +44,16 @@
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+
+[[headers]]
+  for = "/app/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/app/"
+
+[[headers]]
+  for = "/app/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "no-cache"

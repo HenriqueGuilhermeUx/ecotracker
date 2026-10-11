@@ -19,7 +19,8 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/app"
     },
     "android": {
       "package": "com.alternativeventures.ecotracker",
@@ -46,7 +47,9 @@
       }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/icon.png"
     },
     "extra": {
       "company": "Alternative Ventures Ltda",
