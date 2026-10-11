@@ -11,7 +11,8 @@
     "web": "npm run generate:icons && expo start --web",
     "typecheck": "tsc --noEmit",
     "build:apk": "eas build --platform android --profile preview",
-    "build:aab": "eas build --platform android --profile production"
+    "build:aab": "eas build --platform android --profile production",
+    "build:web": "npm run generate:icons && expo export --platform web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -33,7 +34,10 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-worklets": "0.8.3",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "@expo/metro-runtime": "^56.0.16",
+    "react-dom": "19.2.3",
+    "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@types/pngjs": "^6.0.5",
