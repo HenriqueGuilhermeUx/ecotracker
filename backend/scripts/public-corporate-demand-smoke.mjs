@@ -14,7 +14,7 @@ assert.match(backend, /privacyConsent/);
 assert.match(backend, /website_inbound/);
 assert.doesNotMatch(backend, /createCarbonmarkOrder|\/orders|beginPayment|retirement_status\s*=|payment_status\s*=/);
 assert.match(hook, /registerPublicCorporateDemandRoutes\(app\)/);
-assert.match(frontend, /Solicitar oferta empresarial/);
+assert.match(frontend, /Solicitar cotação corporativa/);
 assert.match(frontend, /Sem pagamento nesta etapa/);
 assert.match(frontend, /Nenhum crédito é comprado ou aposentado automaticamente/);
 assert.match(app, /page === "request"/);

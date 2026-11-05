@@ -86,18 +86,18 @@ export function CorporateDemandIntake() {
       <main className="demand-intake-page">
         <section className="demand-intake-hero">
           <div>
-            <span className="demand-eyebrow">OFERTA CORPORATIVA SOB DEMANDA</span>
-            <h1>Diga quanto sua empresa precisa. <em>O EcoTracker monta a oferta.</em></h1>
-            <p>Você não precisa escolher provider, listing ou infraestrutura. Informe sua demanda e nós organizamos a busca, composição, elegibilidade e condições comerciais.</p>
+            <span className="demand-eyebrow">COTAÇÃO CORPORATIVA SOB DEMANDA</span>
+            <h1>Diga quanto sua empresa precisa. <em>O EcoTracker estrutura a cotação.</em></h1>
+            <p>Você não precisa escolher provider, listing ou infraestrutura. Informe sua demanda e o EcoTracker organiza busca, composição, elegibilidade, disponibilidade e condições comerciais.</p>
             <div className="demand-promise-grid">
               <div><b>1</b><span>Você informa o volume</span></div>
               <div><b>2</b><span>O motor busca e combina supply</span></div>
-              <div><b>3</b><span>Revisamos a oferta comercial</span></div>
+              <div><b>3</b><span>Validamos disponibilidade e elegibilidade</span></div>
               <div><b>4</b><span>Você recebe preço + origem + evidências</span></div>
             </div>
           </div>
           <aside>
-            <small>GRANDES VOLUMES</small>
+            <small>OPERAÇÃO ASSISTIDA</small>
             <strong>100 → 10.000+ tCO₂e</strong>
             <p>Uma demanda pode ser composta por um ou mais projetos, conforme disponibilidade, elegibilidade, finalidade e preferências informadas.</p>
           </aside>
@@ -106,13 +106,13 @@ export function CorporateDemandIntake() {
         <section className="demand-form-section">
           <div className="demand-form-copy">
             <span className="demand-eyebrow">30 SEGUNDOS</span>
-            <h2>Solicitar uma oferta</h2>
+            <h2>Solicitar cotação corporativa</h2>
             <p>Os campos marcados são suficientes para iniciar. Preferências de registry, país ou tipo de projeto são opcionais.</p>
             <ul>
               <li>Sem compromisso de compra</li>
               <li>Sem pagamento nesta etapa</li>
-              <li>Preço só é apresentado após validação comercial</li>
-              <li>Compensação exige aposentadoria elegível</li>
+              <li>Disponibilidade e preço são validados antes do fechamento</li>
+              <li>Quando suportado pelo lote, a aposentadoria pode identificar o beneficiário corporativo</li>
             </ul>
           </div>
 
@@ -146,8 +146,8 @@ export function CorporateDemandIntake() {
             <input className="demand-honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} />
             <label className="demand-consent"><input required type="checkbox" checked={form.privacyConsent} onChange={(event) => setForm({ ...form, privacyConsent: event.target.checked })} /><span>Autorizo o EcoTracker a usar estes dados para analisar esta solicitação e entrar em contato sobre a oferta.</span></label>
             {message && <div className="form-msg">{message}</div>}
-            <button className="demand-submit" disabled={sending}>{sending ? "Registrando e iniciando análise..." : "Solicitar oferta empresarial"}</button>
-            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e matching. Nenhum crédito é comprado ou aposentado automaticamente.</small>
+            <button className="demand-submit" disabled={sending}>{sending ? "Registrando e iniciando análise..." : "Solicitar cotação corporativa"}</button>
+            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e matching. A cotação final permanece sujeita à validação do lote. Nenhum crédito é comprado ou aposentado automaticamente.</small>
           </form>
         </section>
       </main>
