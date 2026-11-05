@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ecotracker10.netlify.app/sitemap.xml
+Sitemap: https://ecotracker.com.br/sitemap.xml
