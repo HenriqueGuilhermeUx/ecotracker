@@ -23,7 +23,7 @@ export function MarketShell({ children }: { children: ReactNode }) {
                 <a href="#sell">Vender</a>
                 <a href="#deal-desk">Deal Desk</a>
                 <a href="#carbon-desk">Carbon Desk</a>
-                <a href="#carbonmark-rail">Carbonmark Rail</a>
+                <a href="#liquidity-rail">Infra de Liquidez</a>
                 <a href="#market-admin">Operação</a>
               </div>
             </details>

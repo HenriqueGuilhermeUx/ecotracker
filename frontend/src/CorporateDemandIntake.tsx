@@ -88,10 +88,10 @@ export function CorporateDemandIntake() {
           <div>
             <span className="demand-eyebrow">COTAÇÃO CORPORATIVA SOB DEMANDA</span>
             <h1>Diga quanto sua empresa precisa. <em>O EcoTracker estrutura a cotação.</em></h1>
-            <p>Você não precisa escolher provider, listing ou infraestrutura. Informe sua demanda e o EcoTracker organiza busca, composição, elegibilidade, disponibilidade e condições comerciais.</p>
+            <p>Você informa o que precisa e o EcoTracker organiza a busca, a composição, a elegibilidade, a disponibilidade e as condições comerciais.</p>
             <div className="demand-promise-grid">
               <div><b>1</b><span>Você informa o volume</span></div>
-              <div><b>2</b><span>O motor busca e combina supply</span></div>
+              <div><b>2</b><span>O EcoTracker busca e combina opções</span></div>
               <div><b>3</b><span>Validamos disponibilidade e elegibilidade</span></div>
               <div><b>4</b><span>Você recebe preço + origem + evidências</span></div>
             </div>
@@ -147,7 +147,7 @@ export function CorporateDemandIntake() {
             <label className="demand-consent"><input required type="checkbox" checked={form.privacyConsent} onChange={(event) => setForm({ ...form, privacyConsent: event.target.checked })} /><span>Autorizo o EcoTracker a usar estes dados para analisar esta solicitação e entrar em contato sobre a oferta.</span></label>
             {message && <div className="form-msg">{message}</div>}
             <button className="demand-submit" disabled={sending}>{sending ? "Registrando e iniciando análise..." : "Solicitar cotação corporativa"}</button>
-            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e matching. A cotação final permanece sujeita à validação do lote. Nenhum crédito é comprado ou aposentado automaticamente.</small>
+            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e composição. A cotação final permanece sujeita à validação do lote. Nenhum crédito é comprado ou aposentado automaticamente.</small>
           </form>
         </section>
       </main>
