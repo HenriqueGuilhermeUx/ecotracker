@@ -147,7 +147,7 @@ export function CorporateDemandIntake() {
             <label className="demand-consent"><input required type="checkbox" checked={form.privacyConsent} onChange={(event) => setForm({ ...form, privacyConsent: event.target.checked })} /><span>Autorizo o EcoTracker a usar estes dados para analisar esta solicitação e entrar em contato sobre a oferta.</span></label>
             {message && <div className="form-msg">{message}</div>}
             <button className="demand-submit" disabled={sending}>{sending ? "Registrando e iniciando análise..." : "Solicitar cotação corporativa"}</button>
-            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e matching. A cotação final permanece sujeita à validação do lote e nenhum crédito é comprado ou aposentado automaticamente.</small>
+            <small className="demand-form-footnote">Ao enviar, o EcoTracker inicia a análise de disponibilidade e matching. A cotação final permanece sujeita à validação do lote. Nenhum crédito é comprado ou aposentado automaticamente.</small>
           </form>
         </section>
       </main>
