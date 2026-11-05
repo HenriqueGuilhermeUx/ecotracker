@@ -1,0 +1,17 @@
+name: Partner OTC desk smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  partner-otc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+      - name: Verify OTC desk privacy and safety
+        run: node backend/scripts/partner-otc-smoke.mjs
