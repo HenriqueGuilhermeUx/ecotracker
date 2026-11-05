@@ -15,7 +15,7 @@ export function MarketShell({ children }: { children: ReactNode }) {
           <a href="#planos">Planos</a>
           <a href="#rewards">EcoRewards</a>
           <a href="#contact">Contato</a>
-          <a className="marketplace-nav" href="#request">Solicitar oferta</a>
+          <a className="marketplace-nav" href="#request">Solicitar cotação</a>
           {isAdmin && (
             <details className="admin-nav">
               <summary>Admin</summary>
@@ -40,7 +40,7 @@ export function MarketShell({ children }: { children: ReactNode }) {
             <a href="#contact">Contato</a>
             <a href="#privacy">Privacidade</a>
             <a href="#terms">Termos</a>
-            <a href="#request">Solicitar oferta</a>
+            <a href="#request">Solicitar cotação</a>
           </div>
         </div>
         <small>O EcoTracker apresenta projeto, registry, vintage, volume, condições comerciais e evidências disponíveis. Compensação de emissões só é concluída após aposentadoria elegível e rastreável.</small>
