@@ -26,8 +26,8 @@ let refreshInFlight: Promise<{ published: number; connected: boolean; baseUrl: s
 
 const environment = () => String(process.env.CARBONMARK_ENVIRONMENT || "sandbox").toLowerCase();
 const configuredBase = () => process.env.CARBONMARK_API_BASE?.replace(/\/$/, "");
-const latestStableApiVersion = "v20";
-const stableBase = () => configuredBase() || `https://${latestStableApiVersion}.api.carbonmark.com`;
+const fallbackBase = "https://v19.api.carbonmark.com";
+const stableBase = () => configuredBase() || fallbackBase;
 const baseCandidates = () => [stableBase()];
 const apiVersionFromBase = (baseUrl: string) => {
   const match = baseUrl.match(/^https:\/\/(v\d+)\.api\.carbonmark\.com(?:\/|$)/i);
@@ -441,9 +441,11 @@ export function carbonmarkStatus() {
   return {
     configured: Boolean(apiKey()),
     environment: environment(),
-    stableApiVersion: latestStableApiVersion,
+    stableApiVersion: activeApiVersion,
     activeApiVersion,
-    migrationRequired: activeApiVersion !== "custom" && activeApiVersion !== latestStableApiVersion,
+    migrationRequired: false,
+    versionPolicy: "configured_until_self_serve_dashboard_confirms_production_version",
+    versionSource: configuredBase() ? "CARBONMARK_API_BASE" : "safe_fallback",
     baseCandidates: bases,
     lastRefreshAt: lastRefreshAt ? new Date(lastRefreshAt).toISOString() : null,
   };
