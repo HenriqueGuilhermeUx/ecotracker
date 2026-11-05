@@ -7,31 +7,30 @@ export function CorporateHome() {
       <main className="corp-public">
         <section className="corp-hero">
           <div className="corp-hero-copy">
-            <span className="corp-eyebrow">ECOTRACKER · CRÉDITOS DE CARBONO</span>
+            <span className="corp-eyebrow">ECOTRACKER · COMPRA CORPORATIVA DE CRÉDITOS DE CARBONO</span>
             <h1>Compre créditos de carbono com <em>origem verificável.</em></h1>
             <p>
-              Para empresas que precisam compensar emissões ou estruturar uma compra climática com clareza.
-              O EcoTracker organiza projeto, registry, vintage, volume, preço, aposentadoria e evidências em uma única operação.
+              Para empresas que precisam compensar emissões ou adquirir créditos de carbono com clareza.\n              O EcoTracker estrutura uma operação assistida com projeto, registry, vintage, volume, preço, aposentadoria e evidências em um único fluxo.
             </p>
             <div className="corp-actions">
-              <a className="corp-primary" href="#request">Solicitar oferta empresarial</a>
+              <a className="corp-primary" href="#request">Solicitar cotação corporativa</a>
               <a className="corp-secondary" href="#marketplace">Ver créditos disponíveis</a>
             </div>
             <div className="corp-trust-row">
               <span>Projeto + registry</span>
               <span>Vintage + volume</span>
               <span>Preço + validade</span>
-              <span>Aposentadoria + evidência</span>
+              <span>Aposentadoria + evidência</span>\n              <span>Disponibilidade validada antes do fechamento</span>
             </div>
           </div>
 
           <aside className="corp-offer-card" aria-label="O que acompanha uma oferta EcoTracker">
             <small>OFERTA CORPORATIVA</small>
-            <h2>O que sua empresa analisa antes de comprar</h2>
+            <h2>O que sua empresa recebe antes de decidir</h2>
             <div className="corp-offer-line"><span>01</span><div><b>Origem</b><p>Projeto, registry, país/local e metodologia.</p></div></div>
             <div className="corp-offer-line"><span>02</span><div><b>Crédito</b><p>Vintage, volume e situação de elegibilidade.</p></div></div>
             <div className="corp-offer-line"><span>03</span><div><b>Comercial</b><p>Preço por tCO₂e, valor total e validade.</p></div></div>
-            <div className="corp-offer-line"><span>04</span><div><b>Conclusão</b><p>Aposentadoria para o beneficiário e evidência registral.</p></div></div>
+            <div className="corp-offer-line"><span>04</span><div><b>Conclusão</b><p>Quando aplicável, aposentadoria com beneficiário identificado e evidência registral.</p></div></div>
           </aside>
         </section>
 
@@ -68,13 +67,13 @@ export function CorporateHome() {
 
         <section className="corp-enterprise">
           <div>
-            <span>PARA EMPRESAS E GRANDES VOLUMES</span>
-            <h2>Precisa comprar 100, 1.000 ou 10.000+ tCO₂e?</h2>
+            <span>OPERAÇÃO ASSISTIDA · GRANDES VOLUMES</span>
+            <h2>Sua empresa pode solicitar uma cotação agora.</h2>
             <p>
-              Não dependa do que estiver visível no catálogo naquele instante. Informe sua demanda e o EcoTracker pode estruturar uma oferta com um ou mais projetos, respeitando volume, elegibilidade, validade comercial e finalidade climática.
+              Informe sua demanda mesmo quando o volume não estiver visível no catálogo. O EcoTracker pode estruturar uma cotação com um ou mais projetos, sujeita à disponibilidade, elegibilidade, validade comercial e finalidade climática.
             </p>
           </div>
-          <a className="corp-primary" href="#request">Quero receber uma oferta</a>
+          <a className="corp-primary" href="#request">Quero solicitar uma cotação</a>
         </section>
 
         <section className="corp-section corp-ecot-layer">
