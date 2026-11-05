@@ -30,13 +30,16 @@ A Carbonmark quote alone is never proof of seller confirmation or climate-claim 
 
 ## Carbonmark API state
 
-Public Carbonmark material published in 2026 identifies **v20** as the current stable API release. EcoTracker therefore treats:
+On 2026-11-05, Carbonmark confirmed the new production-access model directly to EcoTracker, but did **not** specify a new API version in that correspondence. Public documentation remains inconsistent across older versioned pages while the new self-serve dashboard is still pending release.
 
-- target stable version: **v20**;
-- currently configured version: derived from `CARBONMARK_API_BASE`;
-- migration required: true whenever the configured version is older than the target.
+EcoTracker therefore follows a fail-closed version policy:
 
-The code must never infer the persisted API version from a hardcoded string. Shadow quotes persist the **active** API version used for that observation.
+- use only the version explicitly configured in `CARBONMARK_API_BASE`;
+- do not auto-upgrade based on an inferred "latest" version;
+- keep the configured rail stable until the self-serve Developer dashboard confirms the production endpoint/version;
+- persist the **active configured API version** with every shadow quote and execution artifact.
+
+This avoids breaking a working integration during the Carbonmark self-serve transition.
 
 The retirement flow remains:
 
@@ -53,17 +56,31 @@ Production order execution remains allowed only when both controls are explicitl
 
 A configured API key or funded API Credits balance is not enough to enable execution.
 
-## API Credits commercial model
+## Production self-serve model — confirmed 2026-11-05
 
-Partner correspondence and Carbonmark's published terms indicate the current commercial direction:
+Carbonmark confirmed directly to EcoTracker:
 
-- prepaid API Credits;
-- reference starter funding discussed: **US$50**;
-- credits do not expire;
+- the prepaid API Credits model **replaces the previous monthly API subscription** for EcoTracker;
+- EcoTracker's existing **KYB carries over**;
+- when the new self-serve model is released, a **Production API key can be created after funding the account with credits**;
+- minimum top-up: **US$50**;
+- maximum top-up transaction: **US$500**;
+- maximum account balance: **US$5,000**;
+- initial weekly spend limit: **US$500**;
+- API Credits **do not expire**;
 - Settlement & Processing Fee: **3%** on top-ups;
-- production access remains subject to onboarding / whitelist.
+- production retirements may set the **final corporate beneficiary name** and **retirement reason/message** through the API.
 
-These values are displayed as readiness information only. They do not authorize automatic charging, top-up, order creation or retirement.
+Carbonmark's published Terms also state that API Credits are prepaid contractual credits rather than cash/stored value, are non-transferable, do not expire, and may be subject to per-key/account spending limits.
+
+EcoTracker policy remains stricter than the provider defaults:
+
+- automatic top-up: **OFF**;
+- live orders: **OFF** until the existing production execution gate is explicitly armed;
+- automatic retirements: **OFF**;
+- seller-listing automation: **OFF**.
+
+A funded balance or Production API key alone never authorizes live execution in EcoTracker.
 
 ## Seller / origination / distribution rail
 
@@ -91,22 +108,29 @@ The Carbonmark Rail panel exposes, separately from execution controls:
 
 - EcoTracker role: MARKET MAKER;
 - buy-side: BACK-TO-BACK;
-- seller/distribution: AWAITING CARBONMARK RESPONSE;
-- automatic seller listing: OFF;
-- API Credits reference: US$50;
-- top-up fee reference: 3%;
+- buy-side production model: CONFIRMED;
+- KYB: CARRIED OVER;
+- monthly API subscription: NOT REQUIRED;
+- self-serve Production API: WAITING RELEASE;
+- minimum top-up: US$50;
+- maximum top-up: US$500;
+- maximum balance: US$5,000;
+- initial weekly spend: US$500;
+- top-up fee: 3%;
 - credits: NON-EXPIRING;
-- production: ONBOARDING.
+- beneficiary retirement: SUPPORTED;
+- seller/distribution: AWAITING WORKFLOW CONFIRMATION;
+- automatic seller listing: OFF.
 
 This information is operational context, not a promise to clients.
 
-## What happens when Carbonmark replies
+## What happens next
 
 The response should be classified into one of these tracks:
 
-### A. Production API approved
+### A. Self-serve Production API released
 
-Validate v20 in sandbox/production credentials, then change `CARBONMARK_API_BASE` only after smoke tests. Keep order execution OFF until a separate explicit live-execution decision.
+Use the existing KYB account, fund with the minimum required API Credits, create a Production API key in the Developer dashboard, record the exact production base URL/version, and validate it through smoke tests. Keep order execution OFF until a separate explicit live-execution decision.
 
 ### B. Seller / origination partnership approved
 
