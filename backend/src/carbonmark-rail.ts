@@ -39,12 +39,43 @@ export async function carbonmarkRailControl(){
     provider,
     execution,
     contract:{
-      stableApiVersion:"v19",
+      stableApiVersion:provider.stableApiVersion,
+      activeApiVersion:provider.activeApiVersion,
+      apiMigrationRequired:provider.migrationRequired,
       shadowQuoteEndpoint:"POST /quotes",
       orderEndpoint:"POST /orders",
       sellerListingCreationAutomated:false,
       shadowQuoteRequiresClaimReady:false,
       orderRequiresClaimReady:true,
+    },
+    partnership:{
+      status:"awaiting_carbonmark_response",
+      ecoTrackerRole:"market_maker_origination_distribution",
+      buyerRail:{
+        mode:"back_to_back",
+        prePurchasedInventoryRequired:false,
+        productionOnboardingRequired:true,
+        executionLive:execution.live,
+      },
+      apiCredits:{
+        model:"prepaid",
+        referenceStarterAmountUsd:50,
+        nonExpiring:true,
+        settlementProcessingFeePct:3,
+        note:"Commercial terms captured from Carbonmark correspondence; operational charging remains disabled until production onboarding is approved.",
+      },
+      sellerDistribution:{
+        status:"partner_discussion",
+        target:"Brazilian and international verified supply distributed through Carbonmark channels",
+        automaticListing:false,
+        note:"EcoTracker may originate and qualify supply, but must not assume a public seller-listing write API until Carbonmark confirms the partner workflow.",
+      },
+      controls:{
+        inventoryStrategy:"back_to_back_by_default",
+        automaticOrders:false,
+        automaticRetirements:false,
+        automaticSellerListings:false,
+      },
     },
     summary:{assets:eligibleAssets.length,claimReady:eligibleAssets.filter((item)=>item.claimReady).length,shadowQuotes:probes.length,orderExecutionLive:execution.live},
     assets:eligibleAssets,
@@ -81,7 +112,7 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
     version:"ecotracker-carbonmark-shadow-quote-v2",
     monitoredAssetId:Number(asset.id),registry:asset.registry,projectName:asset.project_name,sourceReference:asset.source_reference,
     assetPriceSourceId,requestedKg,requestedTonnes,quoteUuid:quote.uuid,costUsdc:quote.costUsdc,costUsdcTonne:costPerTonne,
-    environment:provider.environment,apiVersion:"v19",claimDecision:decision,executionGate:execution,
+    environment:provider.environment,apiVersion:provider.activeApiVersion,stableApiVersion:provider.stableApiVersion,claimDecision:decision,executionGate:execution,
     quotePurpose:"market_price_probe",claimReadyAtObservation:decision.allowed,
     createdBy:actor,observedAt:new Date().toISOString(),
     invariant:"Shadow quote does not create a Carbonmark order, spend funds, or retire carbon. Claim readiness remains mandatory for order/retirement.",
@@ -91,11 +122,11 @@ export async function createCarbonmarkShadowQuote(input:{assetId:number;requeste
     INSERT INTO carbonmark_shadow_quotes(
       monitored_asset_id,asset_price_source_id,requested_kg,requested_tonnes,quote_uuid,cost_usdc,cost_usdc_tonne,
       environment,api_version,created_by,provider_snapshot,probe_snapshot,probe_sha256
-    ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'v19',$9,$10::jsonb,$11::jsonb,$12)
+    ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13)
     ON CONFLICT(quote_uuid) DO NOTHING
     RETURNING *`,[
     asset.id,assetPriceSourceId,requestedKg,requestedTonnes,quote.uuid,quote.costUsdc,costPerTonne,
-    provider.environment,actor,JSON.stringify(quote.raw),JSON.stringify(snapshot),hash,
+    provider.environment,provider.activeApiVersion,actor,JSON.stringify(quote.raw),JSON.stringify(snapshot),hash,
   ])).rows[0];
   const record=inserted||(await pool.query(`SELECT * FROM carbonmark_shadow_quotes WHERE quote_uuid=$1`,[quote.uuid])).rows[0];
   if(inserted){
