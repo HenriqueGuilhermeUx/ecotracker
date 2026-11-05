@@ -40,7 +40,7 @@ async function run(){
   await init();
   process.env.CARBONMARK_API_KEY="cm_api_fake_shadow_smoke";
   process.env.CARBONMARK_ENVIRONMENT="sandbox";
-  process.env.CARBONMARK_API_BASE="https://v19.api.carbonmark.com";
+  process.env.CARBONMARK_API_BASE="https://v20.api.carbonmark.com";
   process.env.CARBONMARK_ORDER_EXECUTION_ENABLED="false";
   process.env.CARBONMARK_ORDER_EXECUTION_ACK="DISABLED";
 
@@ -65,7 +65,7 @@ async function run(){
   assert.equal(result.orderCreated,false);
   assert.equal(result.retirementCreated,false);
   assert.equal(result.execution.live,false);
-  assert.equal(result.api_version,"v19");
+  assert.equal(result.api_version,"v20");
   assert.equal(result.quote_uuid,`shadow-quote-${tag}`);
   assert.equal(Number(result.cost_usdc),9.25);
   assert.equal(Number(result.cost_usdc_tonne),9.25);
@@ -99,7 +99,14 @@ async function run(){
 
   const control=await carbonmarkRailControl();
   assert.equal(control.execution.live,false);
-  assert.equal(control.contract.stableApiVersion,"v19");
+  assert.equal(control.contract.stableApiVersion,"v20");
+  assert.equal(control.contract.activeApiVersion,"v20");
+  assert.equal(control.contract.apiMigrationRequired,false);
+  assert.equal(control.partnership.status,"awaiting_carbonmark_response");
+  assert.equal(control.partnership.ecoTrackerRole,"market_maker_origination_distribution");
+  assert.equal(control.partnership.apiCredits.referenceStarterAmountUsd,50);
+  assert.equal(control.partnership.apiCredits.settlementProcessingFeePct,3);
+  assert.equal(control.partnership.sellerDistribution.automaticListing,false);
   assert.equal(control.contract.sellerListingCreationAutomated,false);
   assert.equal(control.contract.shadowQuoteRequiresClaimReady,false);
   assert.equal(control.contract.orderRequiresClaimReady,true);
@@ -112,7 +119,7 @@ async function run(){
   console.log("Carbonmark shadow quote smoke OK",{
     providerCalls,shadowQuotePersisted:true,restrictedMarketProbe:true,restrictedOrderStillBlocked:true,
     portugueseMarketplaceDescription:true,originalDescriptionPreserved:true,sha256:true,customerQuoteCreated:false,
-    orderCreated:false,retirementCreated:false,orderExecutionLive:false,stableApiVersion:"v19",immutable:true,controlDesk:true,
+    orderCreated:false,retirementCreated:false,orderExecutionLive:false,stableApiVersion:"v20",partnerReadiness:true,immutable:true,controlDesk:true,
   });
 }
 
