@@ -39,6 +39,8 @@ import { registerAssistedQuoteRoutes } from "./assisted-quote-routes.js";
 import { initAssistedSourcingDb } from "./assisted-sourcing-db.js";
 import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-routes.js";
 import { registerClientAgreementRoutes } from "./client-agreement-routes.js";
+import { initPartnerOtcDb } from "./partner-otc-db.js";
+import { registerPartnerOtcRoutes } from "./partner-otc-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
 import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
@@ -116,6 +118,7 @@ if (!proto.__marketInstalled) {
     registerAssistedQuoteRoutes(app);
     registerAssistedSourcingOpsRoutes(app);
     registerClientAgreementRoutes(app);
+    registerPartnerOtcRoutes(app);
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
@@ -143,6 +146,7 @@ if (!proto.__marketInstalled) {
       .then(() => initEligibilityReviewDb())
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
+      .then(() => initPartnerOtcDb())
       .then(() => initSupplyDeskDb())
       .then(() => initDemandDeskDb())
       .then(() => initDemandProposalDb())
