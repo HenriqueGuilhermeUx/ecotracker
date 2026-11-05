@@ -21,7 +21,7 @@ export function CarbonmarkRailPanel(){
     catch(error){setMessage((error as Error).message);}finally{setLoading(false);}},[assetId]);
   useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),30000);return()=>window.clearInterval(timer);},[load]);
   const assets=Array.isArray(data.assets)?data.assets:[];const probes=Array.isArray(data.shadowQuotes)?data.shadowQuotes:[];const certifications=Array.isArray(cert.certifications)?cert.certifications:[];const qualifications=Array.isArray(qualificationData.items)?qualificationData.items:[];const execution=data.execution||{};const sandboxGate=cert.gate||{};
-  const provider=data.provider||{};const contract=data.contract||{};const partnership=data.partnership||{};const apiCredits=partnership.apiCredits||{};const buyerRail=partnership.buyerRail||{};const sellerDistribution=partnership.sellerDistribution||{};
+  const provider=data.provider||{};const contract=data.contract||{};const partnership=data.partnership||{};const apiCredits=partnership.apiCredits||{};const buyerRail=partnership.buyerRail||{};const sellerDistribution=partnership.sellerDistribution||{};const retirementPolicy=partnership.retirement||{};
   const selected=useMemo(()=>assets.find((item:Json)=>String(item.id)===assetId),[assets,assetId]);
   const currentQualification=useMemo(()=>qualifications.find((item:Json)=>String(item.monitored_asset_id)===assetId)||null,[qualifications,assetId]);
   const validKg=Math.round(num(kg));
@@ -96,19 +96,23 @@ export function CarbonmarkRailPanel(){
   }
 
   return <section className="desk-card carbonmark-rail-panel">
-    <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · {provider.activeApiVersion||provider.stableApiVersion||"—"}</span><h2>Market signal → shadow quote → eligibility → execução controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · ativa {provider.activeApiVersion||"—"} · estável {provider.stableApiVersion||"—"}</small></div></header>
-    {contract.apiMigrationRequired&&<div className="rail-blocker"><b>MIGRAÇÃO DE API PENDENTE.</b> A integração está usando {contract.activeApiVersion}, enquanto a versão estável monitorada é {contract.stableApiVersion}. Execução real permanece bloqueada até o smoke da versão nova.</div>}
+    <header className="carbonmark-rail-head"><div><span>CARBONMARK RAIL · {provider.activeApiVersion||"configurada"}</span><h2>Market signal → shadow quote → eligibility → execução controlada</h2></div><div className={`rail-mode ${execution.live?"live":"blocked"}`}><b>{execution.live?"ORDER LIVE":"PRODUÇÃO BLOQUEADA"}</b><small>{execution.environment||"sandbox"} · API {provider.activeApiVersion||"custom"} · versão fixada pela configuração</small></div></header>
     <div className="rail-safety"><strong>GATES INDEPENDENTES</strong><span>Shadow quote prova somente um caminho cotável no provider. Não é seller-confirmed e não cria order. Claim-ready exige revisão humana explícita; execução comercial continua exigindo o gate de produção separado.</span></div>
-    <div className="rail-safety"><strong>NOVA ATUAÇÃO · CARBONMARK PARTNER MODE</strong><span>EcoTracker opera como camada de market making, originação e distribuição: conecta demanda corporativa a supply verificado, usa a Carbonmark como rail de execução e prepara ativos elegíveis para distribuição. Listing automático continua desligado até a Carbonmark confirmar o fluxo seller/origination.</span></div>
+    <div className="rail-safety"><strong>PRODUÇÃO SELF-SERVE CONFIRMADA</strong><span>Carbonmark confirmou que o modelo pré-pago substitui a assinatura mensal, o KYB existente será reaproveitado e a Production API key poderá ser criada via dashboard após o top-up quando o novo self-serve for liberado.</span></div>
+    <div className="rail-safety"><strong>MARKET MAKER + ORIGINAÇÃO</strong><span>Buy-side está definido. A frente seller/distribuição continua separada e aguardando confirmação do workflow da Carbonmark; listing automático permanece desligado.</span></div>
     <div className="rail-status-grid">
       <span><small>Atuação EcoTracker</small><b>MARKET MAKER</b></span>
       <span><small>Buy-side</small><b>{buyerRail.mode==="back_to_back"?"BACK-TO-BACK":"CONTROLADO"}</b></span>
-      <span><small>Seller / distribuição</small><b>{partnership.status==="awaiting_carbonmark_response"?"AGUARDANDO RESPOSTA":"EM PREPARAÇÃO"}</b></span>
-      <span><small>Listing automático</small><b>{sellerDistribution.automaticListing?"ON":"OFF"}</b></span>
-      <span><small>API Credits</small><b>{apiCredits.referenceStarterAmountUsd?`US$ ${num(apiCredits.referenceStarterAmountUsd)}`:"—"}</b></span>
-      <span><small>Taxa do top-up</small><b>{apiCredits.settlementProcessingFeePct?`${num(apiCredits.settlementProcessingFeePct)}%`:"—"}</b></span>
+      <span><small>KYB</small><b>{buyerRail.kybCarryOver?"REAPROVEITADO":"—"}</b></span>
+      <span><small>Assinatura mensal API</small><b>{buyerRail.subscriptionAgreementRequired===false?"NÃO":"—"}</b></span>
+      <span><small>Top-up mínimo</small><b>{apiCredits.minimumTopUpUsd?`US$ ${num(apiCredits.minimumTopUpUsd)}`:"—"}</b></span>
+      <span><small>Top-up máximo</small><b>{apiCredits.maximumTopUpUsd?`US$ ${num(apiCredits.maximumTopUpUsd)}`:"—"}</b></span>
+      <span><small>Saldo máximo</small><b>{apiCredits.maximumBalanceUsd?`US$ ${num(apiCredits.maximumBalanceUsd)}`:"—"}</b></span>
+      <span><small>Spend semanal</small><b>{apiCredits.weeklySpendLimitUsd?`US$ ${num(apiCredits.weeklySpendLimitUsd)}`:"—"}</b></span>
+      <span><small>Taxa top-up</small><b>{apiCredits.settlementProcessingFeePct?`${num(apiCredits.settlementProcessingFeePct)}%`:"—"}</b></span>
       <span><small>Créditos expiram?</small><b>{apiCredits.nonExpiring===true?"NÃO":"—"}</b></span>
-      <span><small>Produção</small><b>{buyerRail.productionOnboardingRequired?"ONBOARDING":"—"}</b></span>
+      <span><small>Beneficiário final</small><b>{retirementPolicy.endBeneficiarySupported?"SUPORTADO":"—"}</b></span>
+      <span><small>Seller / distribuição</small><b>{sellerDistribution.status==="awaiting_partner_workflow_confirmation"?"PENDENTE":"EM PREPARAÇÃO"}</b></span>
     </div>
     <div className="rail-status-grid">
       <span><small>API key</small><b>{execution.configured?"configurada":"ausente"}</b></span><span><small>Prod flag</small><b>{execution.enabled?"ON":"OFF"}</b></span><span><small>Prod ACK</small><b>{execution.acknowledged?"OK":"DISABLED"}</b></span><span><small>Produção</small><b>{execution.live?"LIVE":"BLOCKED"}</b></span>
