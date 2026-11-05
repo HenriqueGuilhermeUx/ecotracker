@@ -17,12 +17,10 @@ import "./market-live.css";
 import "./commerce.css";
 import "./corporate-state.css";
 
-function CarbonmarkRailPage() {
+function LiquidityRailPage() {
   const token = localStorage.getItem("ecotracker_admin_token");
-  if (!token) {
-    return <MarketShell><main className="carbon-desk"><div className="desk-notice">Carbonmark Rail exige sessão admin. Entre primeiro na <a href="#carbon-desk">Carbon Desk</a> e depois volte para esta tela.</div></main></MarketShell>;
-  }
-  return <MarketShell><main className="carbon-desk"><header className="desk-head"><div><span className="tag">ECOTRACKER MARKET MAKER</span><h1>Carbonmark Rail</h1><p>RFQ → provider probe → qualification → eligibility.</p></div><div className="desk-head-actions"><a className="desk-button ghost" href="#carbon-desk">← Carbon Desk</a></div></header><CarbonmarkRfqQualificationPanel /><CarbonmarkRailPanel /></main></MarketShell>;
+  if (!token) return <CorporateHome />;
+  return <MarketShell><main className="carbon-desk"><header className="desk-head"><div><span className="tag">ECOTRACKER MARKET MAKER · ADMIN</span><h1>Infra de Liquidez</h1><p>RFQ → validação de liquidez → qualificação → elegibilidade.</p></div><div className="desk-head-actions"><a className="desk-button ghost" href="#carbon-desk">← Carbon Desk</a></div></header><CarbonmarkRfqQualificationPanel /><CarbonmarkRailPanel /></main></MarketShell>;
 }
 
 export default function MarketApp() {
@@ -43,7 +41,7 @@ export default function MarketApp() {
   if (page === "contact") return <ContactPage />;
   if (page === "market-admin") return <MarketAdmin />;
   if (page === "carbon-desk") return <CarbonDesk />;
-  if (page === "carbonmark-rail") return <CarbonmarkRailPage />;
+  if (page === "liquidity-rail" || page === "carbonmark-rail") return <LiquidityRailPage />;
   if (page === "deal-desk") return <LargeOrderDealDesk />;
   if (page === "sell") return <SellDesk />;
   return <LegacyApp />;
