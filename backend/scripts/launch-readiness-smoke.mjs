@@ -4,6 +4,8 @@ import fs from "node:fs";
 const index = fs.readFileSync(new URL("../../frontend/index.html", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../../frontend/src/MarketApp.tsx", import.meta.url), "utf8");
 const shell = fs.readFileSync(new URL("../../frontend/src/MarketShell.tsx", import.meta.url), "utf8");
+const corporateHome = fs.readFileSync(new URL("../../frontend/src/CorporateHome.tsx", import.meta.url), "utf8");
+const demandUi = fs.readFileSync(new URL("../../frontend/src/CorporateDemandIntake.tsx", import.meta.url), "utf8");
 const legal = fs.readFileSync(new URL("../../frontend/src/LegalPages.tsx", import.meta.url), "utf8");
 const intake = fs.readFileSync(new URL("../src/public-corporate-demand-routes.ts", import.meta.url), "utf8");
 const notify = fs.readFileSync(new URL("../src/inbound-lead-notification.ts", import.meta.url), "utf8");
@@ -23,6 +25,9 @@ for (const route of ["privacy", "terms", "contact", "request"]) {
 assert.match(shell, /#privacy/);
 assert.match(shell, /#terms/);
 assert.match(shell, /61\.920\.356\/0001-38/);
+assert.doesNotMatch(shell, /Carbonmark/i);
+assert.doesNotMatch(corporateHome, /Carbonmark/i);
+assert.doesNotMatch(demandUi, /Carbonmark|provider, listing|trading desk/i);
 assert.match(legal, /Política de Privacidade/);
 assert.match(legal, /Termos de Uso e Condições Gerais/);
 assert.match(legal, /Solicitar exclusão ou anonimização/);
@@ -40,6 +45,8 @@ assert.match(render, /ECOT_SUPPLY_OUTREACH_ENABLED\n\s+value: "false"/);
 assert.match(render, /ECOT_LEAD_NOTIFY_EMAIL/);
 
 assert.match(robots, /Sitemap:/);
-assert.match(sitemap, /ecotracker10\.netlify\.app/);
+assert.match(robots, /ecotracker\.com\.br\/sitemap\.xml/);
+assert.match(sitemap, /ecotracker\.com\.br/);
+assert.doesNotMatch(sitemap, /netlify\.app/);
 
 console.log("EcoTracker launch readiness smoke OK");
