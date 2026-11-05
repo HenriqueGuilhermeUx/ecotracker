@@ -26,8 +26,13 @@ let refreshInFlight: Promise<{ published: number; connected: boolean; baseUrl: s
 
 const environment = () => String(process.env.CARBONMARK_ENVIRONMENT || "sandbox").toLowerCase();
 const configuredBase = () => process.env.CARBONMARK_API_BASE?.replace(/\/$/, "");
-const stableBase = () => configuredBase() || "https://v19.api.carbonmark.com";
+const latestStableApiVersion = "v20";
+const stableBase = () => configuredBase() || `https://${latestStableApiVersion}.api.carbonmark.com`;
 const baseCandidates = () => [stableBase()];
+const apiVersionFromBase = (baseUrl: string) => {
+  const match = baseUrl.match(/^https:\/\/(v\d+)\.api\.carbonmark\.com(?:\/|$)/i);
+  return match?.[1]?.toLowerCase() || "custom";
+};
 
 const apiKey = () => process.env.CARBONMARK_API_KEY?.trim() || "";
 
@@ -431,11 +436,15 @@ export async function executeCarbonmarkRetirement(input: {
 }
 
 export function carbonmarkStatus() {
+  const bases = baseCandidates();
+  const activeApiVersion = apiVersionFromBase(bases[0]);
   return {
     configured: Boolean(apiKey()),
     environment: environment(),
-    stableApiVersion: "v19",
-    baseCandidates: baseCandidates(),
+    stableApiVersion: latestStableApiVersion,
+    activeApiVersion,
+    migrationRequired: activeApiVersion !== "custom" && activeApiVersion !== latestStableApiVersion,
+    baseCandidates: bases,
     lastRefreshAt: lastRefreshAt ? new Date(lastRefreshAt).toISOString() : null,
   };
 }
