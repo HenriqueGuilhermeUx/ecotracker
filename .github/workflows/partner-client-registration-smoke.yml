@@ -1,0 +1,17 @@
+name: Partner Schedule 1 smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  schedule1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+      - name: Verify Schedule 1 client registration workflow
+        run: node backend/scripts/partner-client-registration-smoke.mjs
