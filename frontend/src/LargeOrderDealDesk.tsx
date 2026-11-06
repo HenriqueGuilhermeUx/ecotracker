@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { api } from "./api";
 import { MarketShell } from "./MarketShell";
 import { OtcDeskPanel } from "./OtcDeskPanel";
+import { PartnerRegistrationPanel } from "./PartnerRegistrationPanel";
 import "./deal-desk.css";
 
 type Json = Record<string, any>;
@@ -184,6 +185,7 @@ function DealDeskPanel(){
       <div className="deal-progress"><i style={{width:`${Math.min(100,coverage)}%`}}/></div>
       <div className="deal-kpis"><span><small>Coberto</small><b>{tons(matching.coveredTonnes)} t</b></span><span><small>Gap</small><b>{tons(gap)} t</b></span><span><small>Cobertura</small><b>{coverage.toFixed(1)}%</b></span></div>
       <div className="deal-stage"><span className={matching.fullyCovered?"ok":"warn"}>{matching.fullyCovered?"COBERTURA INTEGRAL":"SOURCING REQUIRED"}</span><p>{matching.fullyCovered?"Créditos claim-ready cobrem o pedido. Próximo passo: revisão comercial.":`RFQ #${result.sourcing?.rfq?.id||"—"} aberto para ${tons(gap)} t.`}</p></div>
+      <PartnerRegistrationPanel opportunityId={Number(result.opportunity?.id)} />
       <OtcDeskPanel opportunityId={Number(result.opportunity?.id)} />
       {result.proposal&&<div className="deal-artifact"><small>PROPOSTA</small><b>{result.proposal.public_code?.slice(0,8)} · {result.proposal.checkout_mode}</b><span>{result.proposal.final_total_brl?`${money(result.proposal.final_total_brl)} · ${money(result.proposal.price_per_tonne_brl)}/t`:"Preço final depende da confirmação das legs"}</span></div>}
       {items.map((item,index)=><div className="deal-asset" key={`${item.assetId}-${index}`}><div><small>ATIVO CLAIM-READY</small><b>{item.projectName||`Ativo #${item.assetId}`}</b><span>{item.registry||"registry n/d"} · vintage {item.vintage||"n/d"}</span></div><div><strong>{tons(item.amountTonnes)} t</strong><small>{item.executionMode||"assisted"}</small></div></div>)}
