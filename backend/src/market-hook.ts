@@ -41,6 +41,8 @@ import { registerAssistedSourcingOpsRoutes } from "./assisted-sourcing-ops-route
 import { registerClientAgreementRoutes } from "./client-agreement-routes.js";
 import { initPartnerOtcDb } from "./partner-otc-db.js";
 import { registerPartnerOtcRoutes } from "./partner-otc-routes.js";
+import { initPartnerClientRegistrationDb } from "./partner-client-registration-db.js";
+import { registerPartnerClientRegistrationRoutes } from "./partner-client-registration-routes.js";
 import { registerCarbonmarkRoutes } from "./carbonmark-routes.js";
 import { initCarbonmarkRailDb } from "./carbonmark-rail-db.js";
 import { registerCarbonmarkRailRoutes } from "./carbonmark-rail-routes.js";
@@ -119,6 +121,7 @@ if (!proto.__marketInstalled) {
     registerAssistedSourcingOpsRoutes(app);
     registerClientAgreementRoutes(app);
     registerPartnerOtcRoutes(app);
+    registerPartnerClientRegistrationRoutes(app);
     registerSupplyDeskRoutes(app);
     registerPuroSupplyScoutRoutes(app);
     registerVerraSupplyScoutRoutes(app);
@@ -147,6 +150,7 @@ if (!proto.__marketInstalled) {
       .then(() => initCommerceDb())
       .then(() => initAssistedSourcingDb())
       .then(() => initPartnerOtcDb())
+      .then(() => initPartnerClientRegistrationDb())
       .then(() => initSupplyDeskDb())
       .then(() => initDemandDeskDb())
       .then(() => initDemandProposalDb())
