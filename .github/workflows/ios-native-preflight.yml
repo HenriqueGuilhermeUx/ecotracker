@@ -1,0 +1,57 @@
+name: EcoTracker native iOS simulator preflight (unsigned)
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ios-native-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Expo dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate native iOS project
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform ios --no-install
+      - name: Install CocoaPods
+        working-directory: mobile/ios
+        run: pod install
+      - name: Compile unsigned simulator .app
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -type d | head -1)"
+          test -n "$WORKSPACE"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath "$RUNNER_TEMP/ecotracker-ios" build 2>&1 | tee ios-native-build.log
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-build-log
+          path: mobile/ios-native-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload unsigned .app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-simulator-app
+          path: ${{ runner.temp }}/ecotracker-ios/Build/Products/Debug-iphonesimulator/*.app
+          if-no-files-found: error
+          retention-days: 7
