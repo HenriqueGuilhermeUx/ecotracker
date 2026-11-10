@@ -39,6 +39,31 @@ jobs:
           test -n "$WORKSPACE"
           SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
           xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath "$RUNNER_TEMP/ecotracker-ios" build 2>&1 | tee ios-native-build.log
+      - name: Install and launch EcoTracker in iPhone simulator
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$RUNNER_TEMP/ecotracker-ios/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' | head -n 1)"
+          test -n "$APP_PATH"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          DEVICE_ID="$(xcrun simctl list devices available -j | node -e 'let x="";process.stdin.on("data",d=>x+=d);process.stdin.on("end",()=>{let d=Object.values(JSON.parse(x).devices).flat().find(v=>v.isAvailable&&v.name.startsWith("iPhone"));if(!d)process.exit(1);console.log(d.udid)})')"
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
+          xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID"
+          sleep 5
+          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/ecotracker-ios-smoke.png"
+          xcrun simctl terminate "$DEVICE_ID" "$BUNDLE_ID"
+          xcrun simctl shutdown "$DEVICE_ID" || true
+      - name: Upload launch screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-smoke-screenshot
+          path: ${{ runner.temp }}/ecotracker-ios-smoke.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
