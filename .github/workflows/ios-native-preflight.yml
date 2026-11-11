@@ -40,7 +40,7 @@ jobs:
           SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
           xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath "$RUNNER_TEMP/ecotracker-ios" build 2>&1 | tee ios-native-build.log
       - name: Install and launch EcoTracker in iPhone simulator
-        timeout-minutes: 12
+        timeout-minutes: 22
         shell: bash
         run: |
           set -euo pipefail
@@ -48,14 +48,43 @@ jobs:
           test -n "$APP_PATH"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")"
           DEVICE_ID="$(xcrun simctl list devices available -j | node -e 'let x="";process.stdin.on("data",d=>x+=d);process.stdin.on("end",()=>{let d=Object.values(JSON.parse(x).devices).flat().find(v=>v.isAvailable&&v.name.startsWith("iPhone"));if(!d)process.exit(1);console.log(d.udid)})')"
+          echo "Simulator $DEVICE_ID / app $BUNDLE_ID"
           xcrun simctl boot "$DEVICE_ID" || true
-          xcrun simctl bootstatus "$DEVICE_ID" -b
-          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
-          xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID"
-          sleep 5
-          xcrun simctl io "$DEVICE_ID" screenshot "$RUNNER_TEMP/ecotracker-ios-smoke.png"
-          xcrun simctl terminate "$DEVICE_ID" "$BUNDLE_ID"
-          xcrun simctl shutdown "$DEVICE_ID" || true
+          export DEVICE_ID APP_PATH BUNDLE_ID
+          python3 - <<'PY'
+          import os, subprocess, sys
+          device=os.environ["DEVICE_ID"]
+          app=os.environ["APP_PATH"]
+          bundle=os.environ["BUNDLE_ID"]
+          def run(label, args, timeout):
+              print(f"START {label}: {args}", flush=True)
+              try:
+                  cp=subprocess.run(args,timeout=timeout,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+              except subprocess.TimeoutExpired as exc:
+                  print(f"TIMEOUT {label} after {timeout}s; inspect simulator host", flush=True)
+                  sys.exit(124)
+              print((cp.stdout or "")[-6000:],flush=True)
+              if cp.returncode:
+                  sys.exit(cp.returncode)
+          run("bootstatus", ["xcrun","simctl","bootstatus",device,"-b"], 720)
+          run("install", ["xcrun","simctl","install",device,app], 240)
+          run("launch", ["xcrun","simctl","launch",device,bundle], 90)
+          run("screenshot", ["xcrun","simctl","io",device,"screenshot",os.environ["RUNNER_TEMP"]+"/ecotracker-ios-smoke.png"], 45)
+          run("terminate", ["xcrun","simctl","terminate",device,bundle], 30)
+          PY
+      - name: Collect simulator status after smoke attempt
+        if: always()
+        shell: bash
+        run: |
+          xcrun simctl list devices > "$RUNNER_TEMP/ecotracker-simulator-status.txt" 2>&1 || true
+      - name: Upload simulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-simulator-status
+          path: ${{ runner.temp }}/ecotracker-simulator-status.txt
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload launch screenshot
         if: always()
         uses: actions/upload-artifact@v4
