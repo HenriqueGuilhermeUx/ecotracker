@@ -1,0 +1,122 @@
+name: EcoTracker native iOS simulator preflight (unsigned)
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ios-native-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Expo dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate native iOS project
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform ios --no-install
+      - name: Install CocoaPods
+        working-directory: mobile/ios
+        run: pod install
+      - name: Compile unsigned simulator .app
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -type d | head -1)"
+          test -n "$WORKSPACE"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath "$RUNNER_TEMP/ecotracker-ios" build 2>&1 | tee ios-native-build.log
+      - name: Install and launch EcoTracker in iPhone simulator
+        timeout-minutes: 22
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$RUNNER_TEMP/ecotracker-ios/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' | head -n 1)"
+          test -n "$APP_PATH"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          DEVICE_ID="$(xcrun simctl list devices available -j | node -e 'let x="";process.stdin.on("data",d=>x+=d);process.stdin.on("end",()=>{let d=Object.values(JSON.parse(x).devices).flat().find(v=>v.isAvailable&&v.name.startsWith("iPhone"));if(!d)process.exit(1);console.log(d.udid)})')"
+          echo "Simulator $DEVICE_ID / app $BUNDLE_ID"
+          xcrun simctl boot "$DEVICE_ID" || true
+          export DEVICE_ID APP_PATH BUNDLE_ID
+          python3 - <<'PY'
+          import os, subprocess, sys
+          device=os.environ["DEVICE_ID"]
+          app=os.environ["APP_PATH"]
+          bundle=os.environ["BUNDLE_ID"]
+          def run(label, args, timeout):
+              print(f"START {label}: {args}", flush=True)
+              try:
+                  cp=subprocess.run(args,timeout=timeout,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+              except subprocess.TimeoutExpired as exc:
+                  print(f"TIMEOUT {label} after {timeout}s; inspect simulator host", flush=True)
+                  sys.exit(124)
+              print((cp.stdout or "")[-6000:],flush=True)
+              if cp.returncode:
+                  sys.exit(cp.returncode)
+          run("bootstatus", ["xcrun","simctl","bootstatus",device,"-b"], 720)
+          run("install", ["xcrun","simctl","install",device,app], 240)
+          run("launch", ["xcrun","simctl","launch",device,bundle], 90)
+          run("screenshot", ["xcrun","simctl","io",device,"screenshot",os.environ["RUNNER_TEMP"]+"/ecotracker-ios-smoke.png"], 45)
+          # A successful simctl launch does not guarantee that the app stayed alive.
+          # If it exited before cleanup, retain that signal without turning it into
+          # a false failure of the install/launch/screenshot smoke check.
+          try:
+              cp=subprocess.run(["xcrun","simctl","terminate",device,bundle],
+                                timeout=30,text=True,stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+              if cp.returncode:
+                  print("APP_NOT_RUNNING_AT_CLEANUP: process already exited; investigate during functional QA", flush=True)
+                  print((cp.stdout or "")[-3000:], flush=True)
+          except subprocess.TimeoutExpired:
+              print("TERMINATE_TIMEOUT: cleanup failed; investigate during functional QA", flush=True)
+          PY
+      - name: Collect simulator status after smoke attempt
+        if: always()
+        shell: bash
+        run: |
+          xcrun simctl list devices > "$RUNNER_TEMP/ecotracker-simulator-status.txt" 2>&1 || true
+      - name: Upload simulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-simulator-status
+          path: ${{ runner.temp }}/ecotracker-simulator-status.txt
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload launch screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-smoke-screenshot
+          path: ${{ runner.temp }}/ecotracker-ios-smoke.png
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-build-log
+          path: mobile/ios-native-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload unsigned .app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecotracker-ios-simulator-app
+          path: ${{ runner.temp }}/ecotracker-ios/Build/Products/Debug-iphonesimulator/*.app
+          if-no-files-found: error
+          retention-days: 7
