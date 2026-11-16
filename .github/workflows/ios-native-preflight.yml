@@ -47,6 +47,10 @@ jobs:
           APP_PATH="$(find "$RUNNER_TEMP/ecotracker-ios/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' | head -n 1)"
           test -n "$APP_PATH"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          test "$BUNDLE_ID" = "com.alternativeventures.ecotracker"
+          DEVICE_FAMILY="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP_PATH/Info.plist")"
+          echo "$DEVICE_FAMILY" | grep -Eq '(^|[^0-9])2([^0-9]|$)'
+          echo "PASS: EcoTracker bundle identifier and declared iPad family"
           DEVICE_ID="$(xcrun simctl list devices available -j | node -e 'let x="";process.stdin.on("data",d=>x+=d);process.stdin.on("end",()=>{let d=Object.values(JSON.parse(x).devices).flat().find(v=>v.isAvailable&&v.name.startsWith("iPhone"));if(!d)process.exit(1);console.log(d.udid)})')"
           echo "Simulator $DEVICE_ID / app $BUNDLE_ID"
           xcrun simctl boot "$DEVICE_ID" || true
