@@ -72,8 +72,10 @@ jobs:
                   sys.exit(cp.returncode)
           run("bootstatus", ["xcrun","simctl","bootstatus",device,"-b"], 720)
           run("install", ["xcrun","simctl","install",device,app], 240)
-          run("launch", ["xcrun","simctl","launch",device,bundle], 90)
-          run("screenshot", ["xcrun","simctl","io",device,"screenshot",os.environ["RUNNER_TEMP"]+"/ecotracker-ios-smoke.png"], 45)
+          # On hosted macOS, first simulator boot can be delayed by CoreLocation migration.
+          # A timeout is a failed smoke test, not evidence of an application crash.
+          run("launch", ["xcrun","simctl","launch",device,bundle], 180)
+          run("screenshot", ["xcrun","simctl","io",device,"screenshot",os.environ["RUNNER_TEMP"]+"/ecotracker-ios-smoke.png"], 60)
           # A successful simctl launch does not guarantee that the app stayed alive.
           # If it exited before cleanup, retain that signal without turning it into
           # a false failure of the install/launch/screenshot smoke check.
