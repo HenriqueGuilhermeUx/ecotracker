@@ -119,10 +119,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload unsigned .app
-        if: success()
+        # Preserve the compiled binary even if simulator boot/launch times out.
+        # Artifacts here are diagnostic only; never treat a failed smoke as PASS.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ecotracker-ios-simulator-app
           path: ${{ runner.temp }}/ecotracker-ios/Build/Products/Debug-iphonesimulator/*.app
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 7
