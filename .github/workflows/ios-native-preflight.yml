@@ -123,7 +123,29 @@ jobs:
           run("bootstatus", ["xcrun","simctl","bootstatus",device,"-b"], 720)
           run("install", ["xcrun","simctl","install",device,app], 240)
           run("launch", ["xcrun","simctl","launch",device,bundle], 180)
-          run("screenshot", ["xcrun","simctl","io",device,"screenshot",os.environ["RUNNER_TEMP"]+"/ecotracker-ipad-smoke.png"], 60)
+          # Hosted macOS may hang after writing the PNG. Require a non-empty
+          # artifact and retry once after a bounded timeout, never mark a
+          # screenshot-less run PASS.
+          screenshot=os.environ["RUNNER_TEMP"]+"/ecotracker-ipad-smoke.png"
+          for attempt in (1, 2):
+              try:
+                  cp=subprocess.run(["xcrun","simctl","io",device,"screenshot",screenshot],
+                                    timeout=120,text=True,stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT)
+                  print((cp.stdout or "")[-3000:],flush=True)
+                  if cp.returncode == 0 and os.path.isfile(screenshot) and os.path.getsize(screenshot)>0:
+                      break
+                  print(f"iPad screenshot attempt {attempt} did not produce a valid PNG",flush=True)
+              except subprocess.TimeoutExpired:
+                  print(f"TIMEOUT iPad screenshot attempt {attempt} after 120s",flush=True)
+                  if os.path.isfile(screenshot) and os.path.getsize(screenshot)>0:
+                      print("Screenshot file exists after simctl timeout; preserve evidence",flush=True)
+                      break
+              if attempt == 2:
+                  sys.exit(124)
+          if not (os.path.isfile(screenshot) and os.path.getsize(screenshot)>0):
+              print("FAIL: missing iPad screenshot",flush=True)
+              sys.exit(1)
           print("PASS: iPad install/launch/screenshot technical smoke, not functional QA", flush=True)
           PY
       - name: Upload iPad launch screenshot
