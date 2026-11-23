@@ -18,6 +18,7 @@ check(https(eas.build?.production?.env?.EXPO_PUBLIC_API_URL),'Production API mus
 check(eas.cli?.appVersionSource==='remote','Remote EAS version source changed; check Apple build version behavior');
 check(eas.build?.production?.autoIncrement===true,'EAS autoIncrement changed; inspect build numbering');
 check(eas.build?.production?.android?.buildType==='app-bundle','Android production profile differs; do not change existing release');
+check(eas.submit?.production?.ios && typeof eas.submit.production.ios==='object','Explicit iOS submit profile missing; verify ASC connection before publishing');
 console.log('INFO: Expo remote versioning / autoIncrement is configured; inspect current App Store Connect build before EAS production build');
 console.log('INFO: iOS usesNonExemptEncryption declaration and company/registered publisher information require legal review');
 console.log('INFO: iOS signed build, Apple Team, App Store Connect association, Play AAB and real QA are NOT verified');
